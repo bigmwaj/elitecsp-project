@@ -82,8 +82,6 @@ public class S3Service {
             uploadMetadata(metadataKey, request, fileKey);
             log.info("Uploaded CV to s3://{}/{}", bucketName, fileKey);
             return fileKey;
-        } catch (CustomException e) {
-            throw e;
         } catch (Exception e) {
             log.error("Failed to upload application to S3 bucket: {}", bucketName, e);
             throw new CustomException(ErrorCode.S3_UPLOAD_FAILURE, 500,

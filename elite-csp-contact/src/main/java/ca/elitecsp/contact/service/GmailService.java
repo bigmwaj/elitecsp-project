@@ -76,8 +76,6 @@ public class GmailService {
             Message gmailMessage = buildGmailMessage(senderName, senderEmail, messageBody);
             gmailClient.users().messages().send(Constants.GMAIL_USER_ME, gmailMessage).execute();
             log.info("Contact email sent to {} on behalf of {}", destinationEmail, senderEmail);
-        } catch (CustomException e) {
-            throw e;
         } catch (Exception e) {
             log.error("Failed to send contact email for sender: {}", senderEmail, e);
             throw new CustomException(ErrorCode.EMAIL_SEND_FAILURE, 500,
