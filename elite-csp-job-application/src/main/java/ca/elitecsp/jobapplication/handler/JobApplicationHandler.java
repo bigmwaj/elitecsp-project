@@ -1,14 +1,14 @@
-package com.elitecsp.jobapplication.handler;
+package ca.elitecsp.jobapplication.handler;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
-import com.elitecsp.jobapplication.model.JobApplicationRequest;
-import com.elitecsp.jobapplication.service.S3Service;
-import com.elitecsp.jobapplication.util.JsonUtil;
-import com.elitecsp.jobapplication.util.ResponseBuilder;
-import com.elitecsp.jobapplication.util.ValidationUtil;
+import ca.elitecsp.jobapplication.model.JobApplicationRequest;
+import ca.elitecsp.jobapplication.service.S3Service;
+import ca.elitecsp.jobapplication.util.JsonUtil;
+import ca.elitecsp.jobapplication.util.ResponseBuilder;
+import ca.elitecsp.jobapplication.util.ValidationUtil;
 
 /**
  * AWS Lambda handler for the job application submission endpoint.

@@ -51,7 +51,7 @@ elite-csp-project/
 
 Receives a contact-form submission from the front end and sends an email to the configured recipient using the **Google Gmail API** with OAuth 2.0.
 
-**Handler:** `com.elitecsp.contact.handler.ContactHandler::handleRequest`
+**Handler:** `handler.ca.elitecsp.contact.ContactHandler::handleRequest`
 
 **Request body (JSON):**
 ```json
@@ -73,7 +73,7 @@ Receives a contact-form submission from the front end and sends an email to the 
 
 Receives a job application form and uploads the PDF CV to an **Amazon S3** bucket together with a JSON metadata file.
 
-**Handler:** `com.elitecsp.jobapplication.handler.JobApplicationHandler::handleRequest`
+**Handler:** `handler.ca.elitecsp.jobapplication.JobApplicationHandler::handleRequest`
 
 **Request body (JSON):**
 ```json
@@ -134,7 +134,7 @@ aws lambda create-function \
   --function-name elite-csp-contact \
   --runtime java17 \
   --role arn:aws:iam::<ACCOUNT_ID>:role/<LAMBDA_ROLE> \
-  --handler com.elitecsp.contact.handler.ContactHandler::handleRequest \
+  --handler handler.ca.elitecsp.contact.ContactHandler::handleRequest \
   --zip-file fileb://elite-csp-contact/target/elite-csp-contact.jar \
   --timeout 30 \
   --memory-size 512
@@ -146,7 +146,7 @@ aws lambda create-function \
   --function-name elite-csp-job-application \
   --runtime java17 \
   --role arn:aws:iam::<ACCOUNT_ID>:role/<LAMBDA_ROLE> \
-  --handler com.elitecsp.jobapplication.handler.JobApplicationHandler::handleRequest \
+  --handler handler.ca.elitecsp.jobapplication.JobApplicationHandler::handleRequest \
   --zip-file fileb://elite-csp-job-application/target/elite-csp-job-application.jar \
   --timeout 30 \
   --memory-size 512

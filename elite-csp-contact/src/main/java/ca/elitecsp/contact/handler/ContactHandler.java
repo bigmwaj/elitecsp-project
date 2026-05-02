@@ -1,14 +1,14 @@
-package com.elitecsp.contact.handler;
+package ca.elitecsp.contact.handler;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
-import com.elitecsp.contact.model.ContactRequest;
-import com.elitecsp.contact.service.GmailService;
-import com.elitecsp.contact.util.JsonUtil;
-import com.elitecsp.contact.util.ResponseBuilder;
-import com.elitecsp.contact.util.ValidationUtil;
+import ca.elitecsp.contact.model.ContactRequest;
+import ca.elitecsp.contact.service.GmailService;
+import ca.elitecsp.contact.util.JsonUtil;
+import ca.elitecsp.contact.util.ResponseBuilder;
+import ca.elitecsp.contact.util.ValidationUtil;
 
 /**
  * AWS Lambda handler for the contact form endpoint.
@@ -23,7 +23,7 @@ import com.elitecsp.contact.util.ValidationUtil;
  * </ol>
  *
  * <p>Handler reference for Lambda:
- * {@code com.elitecsp.contact.handler.ContactHandler::handleRequest}
+ * {@code handler.ca.elitecsp.contact.ContactHandler::handleRequest}
  */
 public class ContactHandler implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
 

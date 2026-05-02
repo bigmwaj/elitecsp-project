@@ -1,6 +1,6 @@
-package com.elitecsp.contact.util;
+package ca.elitecsp.contact.util;
 
-import com.elitecsp.contact.model.ContactRequest;
+import ca.elitecsp.contact.model.ContactRequest;
 
 /**
  * Utility class providing validation helpers for the contact request.

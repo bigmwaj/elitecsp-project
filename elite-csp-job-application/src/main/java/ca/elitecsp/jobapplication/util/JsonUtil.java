@@ -1,4 +1,4 @@
-package com.elitecsp.jobapplication.util;
+package ca.elitecsp.jobapplication.util;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 

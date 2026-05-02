@@ -1,7 +1,7 @@
-package com.elitecsp.jobapplication.service;
+package ca.elitecsp.jobapplication.service;
 
-import com.elitecsp.jobapplication.model.JobApplicationRequest;
-import com.elitecsp.jobapplication.util.JsonUtil;
+import ca.elitecsp.jobapplication.model.JobApplicationRequest;
+import ca.elitecsp.jobapplication.util.JsonUtil;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;

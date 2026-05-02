@@ -1,4 +1,4 @@
-package com.elitecsp.contact.model;
+package ca.elitecsp.contact.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 

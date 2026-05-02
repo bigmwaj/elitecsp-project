@@ -1,4 +1,4 @@
-package com.elitecsp.contact.util;
+package ca.elitecsp.contact.util;
 
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
 

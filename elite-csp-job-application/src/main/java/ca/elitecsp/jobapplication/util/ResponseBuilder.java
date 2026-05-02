@@ -1,4 +1,4 @@
-package com.elitecsp.jobapplication.util;
+package ca.elitecsp.jobapplication.util;
 
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
 

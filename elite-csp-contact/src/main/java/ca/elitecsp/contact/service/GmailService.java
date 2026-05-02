@@ -1,4 +1,4 @@
-package com.elitecsp.contact.service;
+package ca.elitecsp.contact.service;
 
 import com.google.api.client.auth.oauth2.Credential;
 import com.google.api.client.googleapis.auth.oauth2.GoogleCredential;

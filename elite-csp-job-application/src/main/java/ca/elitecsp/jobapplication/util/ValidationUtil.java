@@ -1,6 +1,6 @@
-package com.elitecsp.jobapplication.util;
+package ca.elitecsp.jobapplication.util;
 
-import com.elitecsp.jobapplication.model.JobApplicationRequest;
+import ca.elitecsp.jobapplication.model.JobApplicationRequest;
 
 import java.util.Base64;
 

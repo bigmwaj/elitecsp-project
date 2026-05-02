@@ -1,4 +1,4 @@
-package com.elitecsp.jobapplication.model;
+package ca.elitecsp.jobapplication.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
