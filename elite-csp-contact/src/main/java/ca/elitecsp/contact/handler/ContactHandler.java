@@ -1,14 +1,17 @@
 package ca.elitecsp.contact.handler;
 
+import ca.elitecsp.common.exception.CustomException;
+import ca.elitecsp.common.exception.ErrorCode;
+import ca.elitecsp.common.response.ApiResponseBuilder;
+import ca.elitecsp.common.util.JsonUtils;
+import ca.elitecsp.contact.model.ContactRequest;
+import ca.elitecsp.contact.service.GmailService;
+import ca.elitecsp.contact.util.ValidationUtil;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
-import ca.elitecsp.contact.model.ContactRequest;
-import ca.elitecsp.contact.service.GmailService;
-import ca.elitecsp.contact.util.JsonUtil;
-import ca.elitecsp.contact.util.ResponseBuilder;
-import ca.elitecsp.contact.util.ValidationUtil;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * AWS Lambda handler for the contact form endpoint.
@@ -23,8 +26,9 @@ import ca.elitecsp.contact.util.ValidationUtil;
  * </ol>
  *
  * <p>Handler reference for Lambda:
- * {@code handler.ca.elitecsp.contact.ContactHandler::handleRequest}
+ * {@code ca.elitecsp.contact.handler.ContactHandler::handleRequest}
  */
+@Slf4j
 public class ContactHandler implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
 
     private final GmailService gmailService;
@@ -55,7 +59,7 @@ public class ContactHandler implements RequestHandler<APIGatewayProxyRequestEven
      */
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent request, Context context) {
-        context.getLogger().log("ContactHandler invoked");
+        log.info("ContactHandler invoked");
 
         try {
             ContactRequest contactRequest = parseRequest(request);
@@ -65,16 +69,18 @@ public class ContactHandler implements RequestHandler<APIGatewayProxyRequestEven
                     contactRequest.getEmail(),
                     contactRequest.getMessage()
             );
-            context.getLogger().log("Email sent successfully for: " + contactRequest.getEmail());
-            return ResponseBuilder.success("Your message has been sent successfully.");
+            log.info("Email sent successfully for: {}", contactRequest.getEmail());
+            return ApiResponseBuilder.success("Your message has been sent successfully.");
 
-        } catch (IllegalArgumentException e) {
-            context.getLogger().log("Validation error: " + e.getMessage());
-            return ResponseBuilder.badRequest(e.getMessage());
+        } catch (CustomException e) {
+            log.warn("Request error [{}]: {}", e.getErrorCode(), e.getMessage());
+            return ApiResponseBuilder.fromException(e);
 
         } catch (Exception e) {
-            context.getLogger().log("Unexpected error: " + e.getMessage());
-            return ResponseBuilder.internalError("An unexpected error occurred. Please try again later.");
+            log.error("Unexpected error processing contact request", e);
+            return ApiResponseBuilder.internalError(
+                    "An unexpected error occurred. Please try again later.",
+                    ErrorCode.INTERNAL_ERROR.name());
         }
     }
 
@@ -87,13 +93,14 @@ public class ContactHandler implements RequestHandler<APIGatewayProxyRequestEven
      *
      * @param request the incoming API Gateway event
      * @return the parsed {@link ContactRequest}
-     * @throws IllegalArgumentException if the body is missing or cannot be parsed
+     * @throws CustomException if the body is missing or cannot be parsed
      */
     private ContactRequest parseRequest(APIGatewayProxyRequestEvent request) {
         String body = request.getBody();
         if (body == null || body.isBlank()) {
-            throw new IllegalArgumentException("Request body must not be empty");
+            throw new CustomException(ErrorCode.MISSING_REQUIRED_FIELD, 400,
+                    "Request body must not be empty");
         }
-        return JsonUtil.fromJson(body, ContactRequest.class);
+        return JsonUtils.fromJson(body, ContactRequest.class);
     }
 }

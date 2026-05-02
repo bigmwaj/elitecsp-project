@@ -1,9 +1,15 @@
 package ca.elitecsp.contact.util;
 
+import ca.elitecsp.common.exception.CustomException;
+import ca.elitecsp.common.exception.ErrorCode;
+import ca.elitecsp.common.util.ValidationUtils;
 import ca.elitecsp.contact.model.ContactRequest;
 
 /**
- * Utility class providing validation helpers for the contact request.
+ * Validation helper for the contact form request.
+ *
+ * <p>Delegates generic field and email checks to {@link ValidationUtils} from the
+ * shared common module, keeping only the contact-domain orchestration here.
  */
 public final class ValidationUtil {
 
@@ -12,46 +18,19 @@ public final class ValidationUtil {
     }
 
     /**
-     * Validates the fields of a {@link ContactRequest}.
-     * Throws {@link IllegalArgumentException} with a descriptive message if validation fails.
+     * Validates all fields of a {@link ContactRequest}.
+     * Throws {@link CustomException} with HTTP 400 on the first violated rule.
      *
-     * @param request the contact request to validate
+     * @param request the contact request to validate; must not be {@code null}
+     * @throws CustomException if any required field is missing or invalid
      */
     public static void validateContactRequest(ContactRequest request) {
         if (request == null) {
-            throw new IllegalArgumentException("Request body must not be null");
+            throw new CustomException(ErrorCode.MISSING_REQUIRED_FIELD, 400,
+                    "Request body must not be null");
         }
-        if (isBlank(request.getName())) {
-            throw new IllegalArgumentException("Name must not be blank");
-        }
-        if (isBlank(request.getEmail())) {
-            throw new IllegalArgumentException("Email must not be blank");
-        }
-        if (!isValidEmail(request.getEmail())) {
-            throw new IllegalArgumentException("Email address is invalid: " + request.getEmail());
-        }
-        if (isBlank(request.getMessage())) {
-            throw new IllegalArgumentException("Message must not be blank");
-        }
-    }
-
-    /**
-     * Returns {@code true} if the string is {@code null} or contains only whitespace.
-     *
-     * @param value the string to test
-     * @return {@code true} if blank
-     */
-    public static boolean isBlank(String value) {
-        return value == null || value.trim().isEmpty();
-    }
-
-    /**
-     * Performs a basic email format validation.
-     *
-     * @param email the email address to validate
-     * @return {@code true} if the email format appears valid
-     */
-    private static boolean isValidEmail(String email) {
-        return email != null && email.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+        ValidationUtils.requireNonBlank(request.getName(), "Name");
+        ValidationUtils.requireValidEmail(request.getEmail(), "Email");
+        ValidationUtils.requireNonBlank(request.getMessage(), "Message");
     }
 }

@@ -1,5 +1,8 @@
 package ca.elitecsp.contact.service;
 
+import ca.elitecsp.common.exception.CustomException;
+import ca.elitecsp.common.exception.ErrorCode;
+import ca.elitecsp.common.util.Constants;
 import com.google.api.client.auth.oauth2.Credential;
 import com.google.api.client.googleapis.auth.oauth2.GoogleCredential;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
@@ -7,13 +10,13 @@ import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.services.gmail.Gmail;
 import com.google.api.services.gmail.model.Message;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.mail.Session;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
 import java.io.ByteArrayOutputStream;
 import java.util.Base64;
-import java.util.Collections;
 import java.util.Properties;
 
 /**
@@ -21,17 +24,19 @@ import java.util.Properties;
  *
  * <p>Required environment variables:
  * <ul>
- *   <li>{@code CLIENT_ID}       – Google OAuth2 client ID</li>
- *   <li>{@code CLIENT_SECRET}   – Google OAuth2 client secret</li>
- *   <li>{@code REFRESH_TOKEN}   – OAuth2 refresh token for the sending account</li>
+ *   <li>{@code CLIENT_ID}         – Google OAuth2 client ID</li>
+ *   <li>{@code CLIENT_SECRET}     – Google OAuth2 client secret</li>
+ *   <li>{@code REFRESH_TOKEN}     – OAuth2 refresh token for the sending account</li>
  *   <li>{@code DESTINATION_EMAIL} – The recipient email address</li>
  * </ul>
  */
+@Slf4j
 public class GmailService {
 
-    private static final String APPLICATION_NAME = "Elite CSP Contact";
-    private static final String GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
-    private static final String USER_ME = "me";
+    private static final String ENV_CLIENT_ID = "CLIENT_ID";
+    private static final String ENV_CLIENT_SECRET = "CLIENT_SECRET";
+    private static final String ENV_REFRESH_TOKEN = "REFRESH_TOKEN";
+    private static final String ENV_DESTINATION_EMAIL = "DESTINATION_EMAIL";
 
     /** OAuth2 client ID read from the environment. */
     private final String clientId;
@@ -48,13 +53,13 @@ public class GmailService {
     /**
      * Constructs the service and reads credentials from environment variables.
      *
-     * @throws IllegalStateException if any required environment variable is missing
+     * @throws CustomException if any required environment variable is missing
      */
     public GmailService() {
-        this.clientId = requireEnv("CLIENT_ID");
-        this.clientSecret = requireEnv("CLIENT_SECRET");
-        this.refreshToken = requireEnv("REFRESH_TOKEN");
-        this.destinationEmail = requireEnv("DESTINATION_EMAIL");
+        this.clientId = requireEnv(ENV_CLIENT_ID);
+        this.clientSecret = requireEnv(ENV_CLIENT_SECRET);
+        this.refreshToken = requireEnv(ENV_REFRESH_TOKEN);
+        this.destinationEmail = requireEnv(ENV_DESTINATION_EMAIL);
     }
 
     /**
@@ -63,12 +68,21 @@ public class GmailService {
      * @param senderName  the name of the person who submitted the form
      * @param senderEmail the email address of the sender
      * @param messageBody the message content
-     * @throws Exception if the email could not be sent
+     * @throws CustomException with {@link ErrorCode#EMAIL_SEND_FAILURE} (HTTP 500) if sending fails
      */
-    public void sendContactEmail(String senderName, String senderEmail, String messageBody) throws Exception {
-        Gmail gmailClient = buildGmailClient();
-        Message gmailMessage = buildGmailMessage(senderName, senderEmail, messageBody);
-        gmailClient.users().messages().send(USER_ME, gmailMessage).execute();
+    public void sendContactEmail(String senderName, String senderEmail, String messageBody) {
+        try {
+            Gmail gmailClient = buildGmailClient();
+            Message gmailMessage = buildGmailMessage(senderName, senderEmail, messageBody);
+            gmailClient.users().messages().send(Constants.GMAIL_USER_ME, gmailMessage).execute();
+            log.info("Contact email sent to {} on behalf of {}", destinationEmail, senderEmail);
+        } catch (CustomException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Failed to send contact email for sender: {}", senderEmail, e);
+            throw new CustomException(ErrorCode.EMAIL_SEND_FAILURE, 500,
+                    "Failed to send email: " + e.getMessage(), e);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -85,7 +99,7 @@ public class GmailService {
         NetHttpTransport httpTransport = GoogleNetHttpTransport.newTrustedTransport();
         Credential credential = buildCredential(httpTransport);
         return new Gmail.Builder(httpTransport, GsonFactory.getDefaultInstance(), credential)
-                .setApplicationName(APPLICATION_NAME)
+                .setApplicationName(Constants.GMAIL_APPLICATION_NAME)
                 .build();
     }
 
@@ -156,16 +170,17 @@ public class GmailService {
     }
 
     /**
-     * Reads a required environment variable or throws {@link IllegalStateException}.
+     * Reads a required environment variable or throws {@link CustomException}.
      *
      * @param name the environment variable name
      * @return the value of the environment variable
-     * @throws IllegalStateException if the variable is not set or blank
+     * @throws CustomException if the variable is not set or blank
      */
     private String requireEnv(String name) {
         String value = System.getenv(name);
         if (value == null || value.isBlank()) {
-            throw new IllegalStateException("Missing required environment variable: " + name);
+            throw new CustomException(ErrorCode.INTERNAL_ERROR, 500,
+                    "Missing required environment variable: " + name);
         }
         return value;
     }
