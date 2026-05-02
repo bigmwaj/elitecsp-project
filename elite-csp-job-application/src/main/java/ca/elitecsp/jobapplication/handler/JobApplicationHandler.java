@@ -1,14 +1,17 @@
 package ca.elitecsp.jobapplication.handler;
 
+import ca.elitecsp.common.exception.CustomException;
+import ca.elitecsp.common.exception.ErrorCode;
+import ca.elitecsp.common.response.ApiResponseBuilder;
+import ca.elitecsp.common.util.JsonUtils;
+import ca.elitecsp.jobapplication.model.JobApplicationRequest;
+import ca.elitecsp.jobapplication.service.S3Service;
+import ca.elitecsp.jobapplication.util.ValidationUtil;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
-import ca.elitecsp.jobapplication.model.JobApplicationRequest;
-import ca.elitecsp.jobapplication.service.S3Service;
-import ca.elitecsp.jobapplication.util.JsonUtil;
-import ca.elitecsp.jobapplication.util.ResponseBuilder;
-import ca.elitecsp.jobapplication.util.ValidationUtil;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * AWS Lambda handler for the job application submission endpoint.
@@ -23,8 +26,9 @@ import ca.elitecsp.jobapplication.util.ValidationUtil;
  * </ol>
  *
  * <p>Handler reference for Lambda:
- * {@code com.elitecsp.jobapplication.handler.JobApplicationHandler::handleRequest}
+ * {@code ca.elitecsp.jobapplication.handler.JobApplicationHandler::handleRequest}
  */
+@Slf4j
 public class JobApplicationHandler implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
 
     private final S3Service s3Service;
@@ -55,25 +59,25 @@ public class JobApplicationHandler implements RequestHandler<APIGatewayProxyRequ
      */
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent request, Context context) {
-        context.getLogger().log("JobApplicationHandler invoked");
+        log.info("JobApplicationHandler invoked");
 
         try {
             JobApplicationRequest appRequest = parseRequest(request);
-            ValidationUtil.validateJobApplicationRequest(appRequest);
+            byte[] cvBytes = ValidationUtil.validateAndDecodeCv(appRequest);
 
-            byte[] cvBytes = ValidationUtil.decodeCv(appRequest.getCvFile());
             String fileKey = s3Service.uploadApplication(appRequest, cvBytes);
+            log.info("Application uploaded successfully. Key: {}", fileKey);
+            return ApiResponseBuilder.success("Application submitted successfully. File key: " + fileKey);
 
-            context.getLogger().log("Application uploaded successfully. Key: " + fileKey);
-            return ResponseBuilder.success("Application submitted successfully. File key: " + fileKey);
-
-        } catch (IllegalArgumentException e) {
-            context.getLogger().log("Validation error: " + e.getMessage());
-            return ResponseBuilder.badRequest(e.getMessage());
+        } catch (CustomException e) {
+            log.warn("Request error [{}]: {}", e.getErrorCode(), e.getMessage());
+            return ApiResponseBuilder.fromException(e);
 
         } catch (Exception e) {
-            context.getLogger().log("Unexpected error: " + e.getMessage());
-            return ResponseBuilder.internalError("An unexpected error occurred. Please try again later.");
+            log.error("Unexpected error processing job application", e);
+            return ApiResponseBuilder.internalError(
+                    "An unexpected error occurred. Please try again later.",
+                    ErrorCode.INTERNAL_ERROR.name());
         }
     }
 
@@ -86,13 +90,14 @@ public class JobApplicationHandler implements RequestHandler<APIGatewayProxyRequ
      *
      * @param request the incoming API Gateway event
      * @return the parsed {@link JobApplicationRequest}
-     * @throws IllegalArgumentException if the body is missing or cannot be parsed
+     * @throws CustomException if the body is missing or cannot be parsed
      */
     private JobApplicationRequest parseRequest(APIGatewayProxyRequestEvent request) {
         String body = request.getBody();
         if (body == null || body.isBlank()) {
-            throw new IllegalArgumentException("Request body must not be empty");
+            throw new CustomException(ErrorCode.MISSING_REQUIRED_FIELD, 400,
+                    "Request body must not be empty");
         }
-        return JsonUtil.fromJson(body, JobApplicationRequest.class);
+        return JsonUtils.fromJson(body, JobApplicationRequest.class);
     }
 }

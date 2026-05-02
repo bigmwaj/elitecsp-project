@@ -10,8 +10,50 @@ Serverless backend for the Elite CSP website, built with Java 17 and AWS Lambda.
 
 | Module | Lambda Function | Purpose |
 |---|---|---|
+| `elite-csp-common` | *(shared library)* | Reusable utilities, models, and exceptions |
 | `elite-csp-contact` | `ContactHandler` | Sends contact-form emails via the Gmail API (OAuth2) |
 | `elite-csp-job-application` | `JobApplicationHandler` | Stores CV uploads and metadata in Amazon S3 |
+
+---
+
+## Architecture
+
+```
+                        ┌─────────────────────────┐
+                        │   elite-csp-common       │
+                        │  (shared library JAR)    │
+                        │                          │
+                        │  common.exception/       │
+                        │    ErrorCode             │
+                        │    CustomException       │
+                        │  common.model/           │
+                        │    BaseResponse          │
+                        │  common.response/        │
+                        │    ApiResponseBuilder    │
+                        │  common.util/            │
+                        │    Constants             │
+                        │    JsonUtils             │
+                        │    ValidationUtils       │
+                        └───────────┬─────────────┘
+                                    │ depends on
+               ┌────────────────────┴────────────────────┐
+               │                                         │
+  ┌────────────┴──────────────┐       ┌──────────────────┴──────────────┐
+  │  elite-csp-contact        │       │  elite-csp-job-application      │
+  │                           │       │                                  │
+  │  handler/                 │       │  handler/                        │
+  │    ContactHandler         │       │    JobApplicationHandler         │
+  │  model/                   │       │  model/                          │
+  │    ContactRequest         │       │    JobApplicationRequest         │
+  │  service/                 │       │  service/                        │
+  │    GmailService           │       │    S3Service                     │
+  │  util/                    │       │  util/                           │
+  │    ValidationUtil         │       │    ValidationUtil                │
+  └───────────────────────────┘       └──────────────────────────────────┘
+           │                                      │
+           ▼                                      ▼
+    Gmail API (OAuth2)                    Amazon S3 (SDK v2)
+```
 
 ---
 
@@ -19,28 +61,86 @@ Serverless backend for the Elite CSP website, built with Java 17 and AWS Lambda.
 
 ```
 elite-csp-project/
-├── pom.xml                          ← Parent POM (dependency management + Shade plugin)
+├── pom.xml                              ← Parent POM (dependency management + Shade plugin)
 ├── README.md
+├── elite-csp-common/                    ← Shared library (built first)
+│   ├── pom.xml
+│   └── src/main/java/ca/elitecsp/common/
+│       ├── exception/
+│       │   ├── ErrorCode.java           ← Enum of machine-readable error codes
+│       │   └── CustomException.java     ← Structured exception with HTTP status
+│       ├── model/
+│       │   └── BaseResponse.java        ← Generic JSON response envelope (@Data @Builder)
+│       ├── response/
+│       │   └── ApiResponseBuilder.java  ← Builds APIGatewayProxyResponseEvent responses
+│       └── util/
+│           ├── Constants.java           ← Application-wide constants (limits, headers, etc.)
+│           ├── JsonUtils.java           ← Singleton ObjectMapper wrapper
+│           └── ValidationUtils.java     ← Shared field/email/file validation helpers
 ├── elite-csp-contact/
 │   ├── pom.xml
-│   └── src/main/java/com/elitecsp/contact/
+│   └── src/main/java/ca/elitecsp/contact/
 │       ├── handler/ContactHandler.java
-│       ├── model/ContactRequest.java
+│       ├── model/ContactRequest.java    ← @Data @NoArgsConstructor @AllArgsConstructor
 │       ├── service/GmailService.java
-│       └── util/
-│           ├── JsonUtil.java
-│           ├── ValidationUtil.java
-│           └── ResponseBuilder.java
+│       └── util/ValidationUtil.java
 └── elite-csp-job-application/
     ├── pom.xml
-    └── src/main/java/com/elitecsp/jobapplication/
+    └── src/main/java/ca/elitecsp/jobapplication/
         ├── handler/JobApplicationHandler.java
-        ├── model/JobApplicationRequest.java
+        ├── model/JobApplicationRequest.java  ← @Data @NoArgsConstructor @AllArgsConstructor
         ├── service/S3Service.java
-        └── util/
-            ├── JsonUtil.java
-            ├── ValidationUtil.java
-            └── ResponseBuilder.java
+        └── util/ValidationUtil.java
+```
+
+---
+
+## Shared Module — elite-csp-common
+
+The `elite-csp-common` module is a plain JAR (no Shade packaging) that is **included in the fat JARs** of the Lambda modules via the Maven Shade plugin.
+
+### Purpose
+
+Eliminates code duplication between `elite-csp-contact` and `elite-csp-job-application` by centralising:
+
+| Class | Package | Responsibility |
+|---|---|---|
+| `ErrorCode` | `common.exception` | Enum of machine-readable error identifiers |
+| `CustomException` | `common.exception` | Structured exception carrying `ErrorCode` + HTTP status |
+| `BaseResponse` | `common.model` | Generic `{success, message, error}` response envelope |
+| `ApiResponseBuilder` | `common.response` | Factory for `APIGatewayProxyResponseEvent` responses |
+| `Constants` | `common.util` | Named constants (CV size limit, PDF magic bytes, headers…) |
+| `JsonUtils` | `common.util` | Singleton `ObjectMapper` for JSON serialisation |
+| `ValidationUtils` | `common.util` | Generic field, email, Base64, and PDF validation helpers |
+
+### Module dependencies
+
+```
+elite-csp-common
+  ├── aws-lambda-java-events   (for APIGatewayProxyResponseEvent)
+  ├── jackson-databind         (for ObjectMapper)
+  ├── lombok (provided)
+  └── slf4j-api
+
+elite-csp-contact
+  ├── elite-csp-common
+  ├── aws-lambda-java-core
+  ├── aws-lambda-java-events
+  ├── google-api-services-gmail
+  ├── google-oauth-client-jetty
+  ├── jakarta.mail
+  ├── lombok (provided)
+  ├── slf4j-api
+  └── slf4j-simple
+
+elite-csp-job-application
+  ├── elite-csp-common
+  ├── aws-lambda-java-core
+  ├── aws-lambda-java-events
+  ├── software.amazon.awssdk:s3
+  ├── lombok (provided)
+  ├── slf4j-api
+  └── slf4j-simple
 ```
 
 ---
@@ -51,7 +151,7 @@ elite-csp-project/
 
 Receives a contact-form submission from the front end and sends an email to the configured recipient using the **Google Gmail API** with OAuth 2.0.
 
-**Handler:** `handler.ca.elitecsp.contact.ContactHandler::handleRequest`
+**Handler:** `ca.elitecsp.contact.handler.ContactHandler::handleRequest`
 
 **Request body (JSON):**
 ```json
@@ -64,7 +164,7 @@ Receives a contact-form submission from the front end and sends an email to the 
 
 **Success response (HTTP 200):**
 ```json
-{ "success": true, "message": "Your message has been sent successfully." }
+{ "success": true, "message": "Your message has been sent successfully.", "error": null }
 ```
 
 ---
@@ -73,7 +173,7 @@ Receives a contact-form submission from the front end and sends an email to the 
 
 Receives a job application form and uploads the PDF CV to an **Amazon S3** bucket together with a JSON metadata file.
 
-**Handler:** `handler.ca.elitecsp.jobapplication.JobApplicationHandler::handleRequest`
+**Handler:** `ca.elitecsp.jobapplication.handler.JobApplicationHandler::handleRequest`
 
 **Request body (JSON):**
 ```json
@@ -89,7 +189,7 @@ Receives a job application form and uploads the PDF CV to an **Amazon S3** bucke
 
 **Success response (HTTP 200):**
 ```json
-{ "success": true, "message": "Application submitted successfully. File key: uploads/2024/06/uuid.pdf" }
+{ "success": true, "message": "Application submitted successfully. File key: uploads/2024/06/uuid.pdf", "error": null }
 ```
 
 Files are stored in S3 under the path `uploads/{year}/{month}/{uuid}.pdf`.
@@ -109,12 +209,16 @@ Files are stored in S3 under the path `uploads/{year}/{month}/{uuid}.pdf`.
 mvn clean package -DskipTests
 ```
 
+The `elite-csp-common` module is always built first (it is listed first in the parent POM's `<modules>` section).
+
 ### Output artifacts
 
 | Module | Fat JAR location |
 |---|---|
 | `elite-csp-contact` | `elite-csp-contact/target/elite-csp-contact.jar` |
 | `elite-csp-job-application` | `elite-csp-job-application/target/elite-csp-job-application.jar` |
+
+> The `elite-csp-common` module produces a plain JAR that is bundled inside the two fat JARs above — it is not deployed separately.
 
 ---
 
@@ -134,7 +238,7 @@ aws lambda create-function \
   --function-name elite-csp-contact \
   --runtime java17 \
   --role arn:aws:iam::<ACCOUNT_ID>:role/<LAMBDA_ROLE> \
-  --handler handler.ca.elitecsp.contact.ContactHandler::handleRequest \
+  --handler ca.elitecsp.contact.handler.ContactHandler::handleRequest \
   --zip-file fileb://elite-csp-contact/target/elite-csp-contact.jar \
   --timeout 30 \
   --memory-size 512
@@ -146,7 +250,7 @@ aws lambda create-function \
   --function-name elite-csp-job-application \
   --runtime java17 \
   --role arn:aws:iam::<ACCOUNT_ID>:role/<LAMBDA_ROLE> \
-  --handler handler.ca.elitecsp.jobapplication.JobApplicationHandler::handleRequest \
+  --handler ca.elitecsp.jobapplication.handler.JobApplicationHandler::handleRequest \
   --zip-file fileb://elite-csp-job-application/target/elite-csp-job-application.jar \
   --timeout 30 \
   --memory-size 512
@@ -230,5 +334,7 @@ curl -X POST https://<api-id>.execute-api.<region>.amazonaws.com/job-application
 
 **Error response body:**
 ```json
-{ "success": false, "message": "Descriptive error message" }
+{ "success": false, "message": "Descriptive error message", "error": "ERROR_CODE" }
 ```
+
+The `error` field contains a machine-readable `ErrorCode` name (e.g. `MISSING_REQUIRED_FIELD`, `INVALID_EMAIL`, `FILE_TOO_LARGE`, `EMAIL_SEND_FAILURE`).
