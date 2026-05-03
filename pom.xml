@@ -31,10 +31,8 @@
         <aws-lambda-java-events.version>3.11.4</aws-lambda-java-events.version>
         <jackson-databind.version>2.16.1</jackson-databind.version>
         <aws-sdk-v2.version>2.25.6</aws-sdk-v2.version>
-        <google-api-services-gmail.version>v1-rev20220404-2.0.0</google-api-services-gmail.version>
-        <google-oauth-client-jetty.version>1.34.1</google-oauth-client-jetty.version>
-        <jakarta-mail.version>1.6.7</jakarta-mail.version>
         <maven-shade-plugin.version>3.5.1</maven-shade-plugin.version>
+        <sonar-maven-plugin.version>3.11.0.3922</sonar-maven-plugin.version>
         <lombok.version>1.18.30</lombok.version>
         <slf4j.version>2.0.12</slf4j.version>
     </properties>
@@ -69,25 +67,11 @@
                 <version>${aws-sdk-v2.version}</version>
             </dependency>
 
-            <!-- Google Gmail API -->
+            <!-- AWS SDK v2 SES (Simple Email Service) -->
             <dependency>
-                <groupId>com.google.apis</groupId>
-                <artifactId>google-api-services-gmail</artifactId>
-                <version>${google-api-services-gmail.version}</version>
-            </dependency>
-
-            <!-- Google OAuth2 client -->
-            <dependency>
-                <groupId>com.google.oauth-client</groupId>
-                <artifactId>google-oauth-client-jetty</artifactId>
-                <version>${google-oauth-client-jetty.version}</version>
-            </dependency>
-
-            <!-- Jakarta Mail (javax.mail) for MIME email construction -->
-            <dependency>
-                <groupId>com.sun.mail</groupId>
-                <artifactId>jakarta.mail</artifactId>
-                <version>${jakarta-mail.version}</version>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>ses</artifactId>
+                <version>${aws-sdk-v2.version}</version>
             </dependency>
 
             <!-- Elite CSP Common (shared utilities) -->
@@ -169,6 +153,13 @@
                             </configuration>
                         </execution>
                     </executions>
+                </plugin>
+
+                <!-- SonarQube Maven Plugin for code quality analysis -->
+                <plugin>
+                    <groupId>org.sonarsource.scanner.maven</groupId>
+                    <artifactId>sonar-maven-plugin</artifactId>
+                    <version>${sonar-maven-plugin.version}</version>
                 </plugin>
             </plugins>
         </pluginManagement>

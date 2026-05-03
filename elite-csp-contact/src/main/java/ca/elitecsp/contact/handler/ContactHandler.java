@@ -5,7 +5,7 @@ import ca.elitecsp.common.exception.ErrorCode;
 import ca.elitecsp.common.response.ApiResponseBuilder;
 import ca.elitecsp.common.util.JsonUtils;
 import ca.elitecsp.contact.model.ContactRequest;
-import ca.elitecsp.contact.service.GmailService;
+import ca.elitecsp.contact.service.SESService;
 import ca.elitecsp.contact.util.ValidationUtil;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
@@ -21,7 +21,7 @@ import lombok.extern.slf4j.Slf4j;
  * <ol>
  *   <li>Parses the JSON body into a {@link ContactRequest}.</li>
  *   <li>Validates the request fields.</li>
- *   <li>Delegates email sending to {@link GmailService}.</li>
+ *   <li>Delegates email sending to {@link SESService}.</li>
  *   <li>Returns a structured JSON response.</li>
  * </ol>
  *
@@ -31,23 +31,23 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ContactHandler implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
 
-    private final GmailService gmailService;
+    private final SESService sesService;
 
     /**
      * Default no-arg constructor used by the Lambda runtime.
-     * Initialises {@link GmailService} which reads credentials from environment variables.
+     * Initialises {@link SESService} which reads configuration from environment variables.
      */
     public ContactHandler() {
-        this.gmailService = new GmailService();
+        this.sesService = new SESService();
     }
 
     /**
      * Constructor for dependency injection (useful in tests).
      *
-     * @param gmailService the Gmail service to use
+     * @param sesService the SES service to use
      */
-    public ContactHandler(GmailService gmailService) {
-        this.gmailService = gmailService;
+    public ContactHandler(SESService sesService) {
+        this.sesService = sesService;
     }
 
     /**
@@ -63,8 +63,9 @@ public class ContactHandler implements RequestHandler<APIGatewayProxyRequestEven
 
         try {
             ContactRequest contactRequest = parseRequest(request);
+            log.info("Contact request received from: {}", contactRequest.getEmail());
             ValidationUtil.validateContactRequest(contactRequest);
-            gmailService.sendContactEmail(
+            sesService.sendContactEmail(
                     contactRequest.getName(),
                     contactRequest.getEmail(),
                     contactRequest.getMessage()

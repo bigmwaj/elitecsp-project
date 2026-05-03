@@ -1,6 +1,6 @@
 # Elite CSP Project
 
-Serverless backend for the Elite CSP website, built with Java 17 and AWS Lambda.
+Serverless backend for the Elite CSP website, built with Java 21 and AWS Lambda.
 
 ---
 
@@ -11,12 +11,23 @@ Serverless backend for the Elite CSP website, built with Java 17 and AWS Lambda.
 | Module | Lambda Function | Purpose |
 |---|---|---|
 | `elite-csp-common` | *(shared library)* | Reusable utilities, models, and exceptions |
-| `elite-csp-contact` | `ContactHandler` | Sends contact-form emails via the Gmail API (OAuth2) |
+| `elite-csp-contact` | `ContactHandler` | Sends contact-form emails via **Amazon SES** |
 | `elite-csp-job-application` | `JobApplicationHandler` | Stores CV uploads and metadata in Amazon S3 |
 
 ---
 
 ## Architecture
+
+```
+Angular (Frontend)
+       │
+       ▼
+Amazon API Gateway
+  ├── POST /contact          ──► elite-csp-contact Lambda  ──► Amazon SES
+  └── POST /job-application  ──► elite-csp-job-application Lambda ──► Amazon S3
+```
+
+### Module dependency tree
 
 ```
                         ┌─────────────────────────┐
@@ -46,13 +57,13 @@ Serverless backend for the Elite CSP website, built with Java 17 and AWS Lambda.
   │  model/                   │       │  model/                          │
   │    ContactRequest         │       │    JobApplicationRequest         │
   │  service/                 │       │  service/                        │
-  │    GmailService           │       │    S3Service                     │
+  │    SESService             │       │    S3Service                     │
   │  util/                    │       │  util/                           │
   │    ValidationUtil         │       │    ValidationUtil                │
   └───────────────────────────┘       └──────────────────────────────────┘
            │                                      │
            ▼                                      ▼
-    Gmail API (OAuth2)                    Amazon S3 (SDK v2)
+   Amazon SES (SDK v2)                    Amazon S3 (SDK v2)
 ```
 
 ---
@@ -63,6 +74,7 @@ Serverless backend for the Elite CSP website, built with Java 17 and AWS Lambda.
 elite-csp-project/
 ├── pom.xml                              ← Parent POM (dependency management + Shade plugin)
 ├── README.md
+├── sonar-project.properties             ← SonarQube analysis configuration
 ├── elite-csp-common/                    ← Shared library (built first)
 │   ├── pom.xml
 │   └── src/main/java/ca/elitecsp/common/
@@ -82,7 +94,7 @@ elite-csp-project/
 │   └── src/main/java/ca/elitecsp/contact/
 │       ├── handler/ContactHandler.java
 │       ├── model/ContactRequest.java    ← @Data @NoArgsConstructor @AllArgsConstructor
-│       ├── service/GmailService.java
+│       ├── service/SESService.java      ← Sends email via Amazon SES SDK v2
 │       └── util/ValidationUtil.java
 └── elite-csp-job-application/
     ├── pom.xml
@@ -109,7 +121,7 @@ Eliminates code duplication between `elite-csp-contact` and `elite-csp-job-appli
 | `CustomException` | `common.exception` | Structured exception carrying `ErrorCode` + HTTP status |
 | `BaseResponse` | `common.model` | Generic `{success, message, error}` response envelope |
 | `ApiResponseBuilder` | `common.response` | Factory for `APIGatewayProxyResponseEvent` responses |
-| `Constants` | `common.util` | Named constants (CV size limit, PDF magic bytes, headers…) |
+| `Constants` | `common.util` | Named constants (CV size limit, PDF magic bytes, headers, email subject…) |
 | `JsonUtils` | `common.util` | Singleton `ObjectMapper` for JSON serialisation |
 | `ValidationUtils` | `common.util` | Generic field, email, Base64, and PDF validation helpers |
 
@@ -126,9 +138,7 @@ elite-csp-contact
   ├── elite-csp-common
   ├── aws-lambda-java-core
   ├── aws-lambda-java-events
-  ├── google-api-services-gmail
-  ├── google-oauth-client-jetty
-  ├── jakarta.mail
+  ├── software.amazon.awssdk:ses
   ├── lombok (provided)
   ├── slf4j-api
   └── slf4j-simple
@@ -149,7 +159,7 @@ elite-csp-job-application
 
 ### elite-csp-contact
 
-Receives a contact-form submission from the front end and sends an email to the configured recipient using the **Google Gmail API** with OAuth 2.0.
+Receives a contact-form submission from the front end and sends an email to the configured recipient using **Amazon Simple Email Service (SES)** via the AWS SDK v2.
 
 **Handler:** `ca.elitecsp.contact.handler.ContactHandler::handleRequest`
 
@@ -200,7 +210,7 @@ Files are stored in S3 under the path `uploads/{year}/{month}/{uuid}.pdf`.
 
 ### Prerequisites
 
-- Java 17+
+- Java 21+
 - Apache Maven 3.8+
 
 ### Build all modules
@@ -236,7 +246,7 @@ mvn clean package -DskipTests
 ```bash
 aws lambda create-function \
   --function-name elite-csp-contact \
-  --runtime java17 \
+  --runtime java21 \
   --role arn:aws:iam::<ACCOUNT_ID>:role/<LAMBDA_ROLE> \
   --handler ca.elitecsp.contact.handler.ContactHandler::handleRequest \
   --zip-file fileb://elite-csp-contact/target/elite-csp-contact.jar \
@@ -248,7 +258,7 @@ aws lambda create-function \
 ```bash
 aws lambda create-function \
   --function-name elite-csp-job-application \
-  --runtime java17 \
+  --runtime java21 \
   --role arn:aws:iam::<ACCOUNT_ID>:role/<LAMBDA_ROLE> \
   --handler ca.elitecsp.jobapplication.handler.JobApplicationHandler::handleRequest \
   --zip-file fileb://elite-csp-job-application/target/elite-csp-job-application.jar \
@@ -277,17 +287,19 @@ Create an HTTP API (or REST API) in API Gateway and configure the following rout
 
 | Variable | Description |
 |---|---|
-| `CLIENT_ID` | Google OAuth2 client ID |
-| `CLIENT_SECRET` | Google OAuth2 client secret |
-| `REFRESH_TOKEN` | OAuth2 refresh token for the Gmail sender account |
+| `FROM_EMAIL` | Verified SES sender email address |
 | `DESTINATION_EMAIL` | Recipient email address for contact messages |
+| `AWS_REGION` | AWS region where SES is configured (e.g. `us-east-1`) |
+
+> **Note:** AWS credentials (access key / secret) are **not** required as environment variables.
+> The Lambda execution role provides them automatically via the AWS default credential chain.
 
 ### elite-csp-job-application
 
 | Variable | Description |
 |---|---|
 | `S3_BUCKET_NAME` | Name of the S3 bucket where CVs are stored |
-| `AWS_REGION` | AWS region (e.g. `eu-west-1`). Optional if the Lambda execution role has a default region. |
+| `AWS_REGION` | AWS region (e.g. `eu-west-1`) |
 
 ---
 
@@ -338,3 +350,47 @@ curl -X POST https://<api-id>.execute-api.<region>.amazonaws.com/job-application
 ```
 
 The `error` field contains a machine-readable `ErrorCode` name (e.g. `MISSING_REQUIRED_FIELD`, `INVALID_EMAIL`, `FILE_TOO_LARGE`, `EMAIL_SEND_FAILURE`).
+
+---
+
+## Code Quality Analysis (SonarQube)
+
+SonarQube integration is configured via `sonar-project.properties` at the project root and the `sonar-maven-plugin` declared in the parent POM.
+
+### Running the analysis
+
+```bash
+mvn clean package sonar:sonar \
+  -Dsonar.host.url=http://localhost:9000 \
+  -Dsonar.login=<SONAR_TOKEN>
+```
+
+### Quality Gate Summary
+
+| Dimension | Rating | Notes |
+|---|---|---|
+| **Maintainability** | A | Shared module eliminates duplication; constants replace magic values; Lombok reduces boilerplate |
+| **Security** | B | No hardcoded credentials; HTML content is escaped before email injection; input validated before use |
+| **Reliability** | A | All public methods guard against null/blank inputs; exceptions carry HTTP status codes |
+
+### Identified Issues & Resolutions
+
+| Issue | Status |
+|---|---|
+| Hardcoded Google OAuth credentials | ✅ Resolved – replaced with SES + IAM role |
+| Gmail OAuth2 scope (unused secret exposure) | ✅ Resolved – OAuth2 flow removed entirely |
+| Missing HTML escaping in email body | ✅ Resolved – `htmlEscape()` applied to all user-supplied fields before rendering in email |
+| Magic string for email subject | ✅ Resolved – moved to `Constants.CONTACT_EMAIL_SUBJECT_PREFIX` |
+| `System.out` logging | ✅ Resolved – all modules use `@Slf4j` structured logging |
+| Duplicated validation logic | ✅ Resolved – `ValidationUtil` delegates to shared `ValidationUtils` |
+
+### Recommendations
+
+| Recommendation | Priority |
+|---|---|
+| Add **rate limiting** on API Gateway to prevent abuse of the contact endpoint | High |
+| Add a **CAPTCHA** (e.g. AWS WAF CAPTCHA or reCAPTCHA) on the contact form | High |
+| Protect the API with **AWS WAF** (Web Application Firewall) rules | Medium |
+| Monitor invocation errors and SES bounce/complaint rates via **Amazon CloudWatch** | Medium |
+| Enable **SES event publishing** (SNS) to track delivery, bounce, and complaint events | Medium |
+| Add unit tests with mocked `SesClient` to verify email construction | Low |
