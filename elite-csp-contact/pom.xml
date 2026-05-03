@@ -15,7 +15,7 @@
     <packaging>jar</packaging>
 
     <name>Elite CSP Contact Module</name>
-    <description>AWS Lambda function to send emails using Gmail API</description>
+    <description>AWS Lambda function to send emails using Amazon SES</description>
 
     <dependencies>
         <!-- AWS Lambda Core -->
@@ -36,22 +36,10 @@
             <artifactId>elite-csp-common</artifactId>
         </dependency>
 
-        <!-- Google Gmail API -->
+        <!-- AWS SDK v2 SES (Simple Email Service) -->
         <dependency>
-            <groupId>com.google.apis</groupId>
-            <artifactId>google-api-services-gmail</artifactId>
-        </dependency>
-
-        <!-- Google OAuth2 client -->
-        <dependency>
-            <groupId>com.google.oauth-client</groupId>
-            <artifactId>google-oauth-client-jetty</artifactId>
-        </dependency>
-
-        <!-- Jakarta Mail for MIME message construction -->
-        <dependency>
-            <groupId>com.sun.mail</groupId>
-            <artifactId>jakarta.mail</artifactId>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ses</artifactId>
         </dependency>
 
         <!-- Lombok for annotation-based boilerplate reduction -->

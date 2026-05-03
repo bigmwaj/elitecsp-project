@@ -52,17 +52,17 @@ public final class Constants {
     public static final String S3_UPLOADS_PREFIX = "uploads";
 
     // -------------------------------------------------------------------------
-    // Gmail / email constants
+    // Email / SES constants
     // -------------------------------------------------------------------------
 
-    /** Display name used in the Gmail API application name. */
-    public static final String GMAIL_APPLICATION_NAME = "Elite CSP Contact";
+    /** MIME type for plain-text email content. */
+    public static final String CONTENT_TYPE_TEXT_PLAIN = "text/plain; charset=UTF-8";
 
-    /** Gmail OAuth2 scope required to send messages. */
-    public static final String GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+    /** MIME type for HTML email content. */
+    public static final String CONTENT_TYPE_TEXT_HTML = "text/html; charset=UTF-8";
 
-    /** Value passed as the Gmail user ID to represent the authenticated account. */
-    public static final String GMAIL_USER_ME = "me";
+    /** Subject prefix for contact-form emails sent via Amazon SES. */
+    public static final String CONTACT_EMAIL_SUBJECT_PREFIX = "Elite CSP – Contact Form: ";
 
     // -------------------------------------------------------------------------
     // Email format pattern
