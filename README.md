@@ -379,7 +379,7 @@ mvn clean package sonar:sonar \
 |---|---|
 | Hardcoded Google OAuth credentials | ✅ Resolved – replaced with SES + IAM role |
 | Gmail OAuth2 scope (unused secret exposure) | ✅ Resolved – OAuth2 flow removed entirely |
-| Missing HTML escaping in email body | ✅ Resolved – `htmlEscape()` applied to all user-supplied fields |
+| Missing HTML escaping in email body | ✅ Resolved – `htmlEscape()` applied to all user-supplied fields before rendering in email |
 | Magic string for email subject | ✅ Resolved – moved to `Constants.CONTACT_EMAIL_SUBJECT_PREFIX` |
 | `System.out` logging | ✅ Resolved – all modules use `@Slf4j` structured logging |
 | Duplicated validation logic | ✅ Resolved – `ValidationUtil` delegates to shared `ValidationUtils` |

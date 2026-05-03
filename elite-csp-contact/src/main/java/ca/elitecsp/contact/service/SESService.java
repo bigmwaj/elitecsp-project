@@ -157,7 +157,7 @@ public class SESService {
     private String buildHtmlBody(String senderName, String senderEmail, String messageBody) {
         String escapedName    = htmlEscape(senderName);
         String escapedEmail   = htmlEscape(senderEmail);
-        String escapedMessage = htmlEscape(messageBody).replace("\n", "<br>");
+        String escapedMessage = htmlEscape(messageBody).replace("\n", "<br/>");
 
         return "<!DOCTYPE html>"
             + "<html lang=\"en\">"
