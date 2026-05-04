@@ -1,17 +1,28 @@
 package ca.elitecsp.contact.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Represents the incoming contact form request payload.
- * This model maps to the JSON body sent from the API Gateway.
+ * Represents the incoming contact / job-application request payload.
+ * This model maps to the JSON body sent from API Gateway.
  *
- * <p>An optional file attachment (e.g. a CV or resume in PDF format) may be
- * included as a Base64-encoded string in {@link #attachmentFile}, with its
- * original filename provided in {@link #attachmentFileName}.
+ * <p>The {@link #type} field selects the processing path:
+ * <ul>
+ *   <li>{@link ContactType#CONTACT} (default) – sends a notification email via SES.</li>
+ *   <li>{@link ContactType#JOB_APPLICATION} – uploads the CV to S3, then sends an email
+ *       with the file URL; {@link #attachment} and {@link #attachmentFileName} are
+ *       required for this type.</li>
+ * </ul>
+ *
+ * <p>JSON backward-compatibility notes:
+ * <ul>
+ *   <li>{@code "name"} is accepted as an alias for {@code "fullName"}.</li>
+ *   <li>{@code "attachmentFile"} is accepted as an alias for {@code "attachment"}.</li>
+ * </ul>
  */
 @Data
 @NoArgsConstructor
@@ -19,25 +30,51 @@ import lombok.NoArgsConstructor;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ContactRequest {
 
-    /** Full name of the person submitting the contact form. */
-    private String name;
+    /**
+     * Contact type that determines the processing path.
+     * Defaults to {@link ContactType#CONTACT} when omitted.
+     */
+    private ContactType type;
+
+    /**
+     * Full name of the person submitting the form.
+     * Accepts {@code "name"} as an alias for backward compatibility.
+     */
+    @JsonAlias("name")
+    private String fullName;
 
     /** Email address of the sender. */
     private String email;
 
-    /** Message body of the contact form. */
+    /**
+     * City of the sender (optional).
+     * Displayed in the notification email when provided.
+     */
+    private String city;
+
+    /**
+     * Subject of the message (optional, for {@link ContactType#CONTACT} only).
+     * When omitted, the email subject is auto-generated from the sender name.
+     */
+    private String subject;
+
+    /** Message body / cover letter of the submission. */
     private String message;
 
     /**
-     * Optional Base64-encoded file to attach to the contact email
-     * (e.g. a CV in PDF format). A data-URI prefix such as
-     * {@code data:application/pdf;base64,} is automatically stripped.
+     * Optional Base64-encoded file to include with the submission.
+     * A data-URI prefix such as {@code data:application/pdf;base64,} is
+     * automatically stripped before processing.
+     * Accepts {@code "attachmentFile"} as an alias for backward compatibility.
+     * <p>Required when {@link #type} is {@link ContactType#JOB_APPLICATION}.
      */
-    private String attachmentFile;
+    @JsonAlias("attachmentFile")
+    private String attachment;
 
     /**
-     * Original filename for the attachment (e.g. {@code "resume.pdf"}).
-     * Required when {@link #attachmentFile} is provided.
+     * Original filename for the attachment (e.g. {@code "resume.pdf"} or
+     * {@code "cv.docx"}).  Required when {@link #attachment} is provided.
      */
     private String attachmentFileName;
 }
+

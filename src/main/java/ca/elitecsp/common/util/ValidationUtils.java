@@ -137,4 +137,53 @@ public final class ValidationUtils {
             }
         }
     }
+
+    /**
+     * Validates that the file is an allowed type (PDF or DOCX) based on both the
+     * filename extension and the file's magic bytes.
+     *
+     * <ul>
+     *   <li>PDF: filename ends with {@code .pdf} and content starts with {@code %PDF}.</li>
+     *   <li>DOCX: filename ends with {@code .docx} and content starts with the ZIP
+     *       signature {@code PK\x03\x04}.</li>
+     * </ul>
+     *
+     * @param fileBytes the decoded file bytes
+     * @param fileName  the original filename (e.g. {@code "resume.pdf"} or {@code "cv.docx"})
+     * @throws CustomException with {@link ErrorCode#INVALID_FILE_TYPE} (HTTP 400)
+     *                         if the file type is not allowed or the magic bytes do not match
+     */
+    public static void requireAllowedFileType(byte[] fileBytes, String fileName) {
+        String lowerName = fileName == null ? "" : fileName.toLowerCase();
+        if (lowerName.endsWith(".pdf")) {
+            requirePdfMagicBytes(fileBytes);
+        } else if (lowerName.endsWith(".docx")) {
+            requireDocxMagicBytes(fileBytes);
+        } else {
+            throw new CustomException(ErrorCode.INVALID_FILE_TYPE, 400,
+                    "Unsupported file type. Allowed types: PDF, DOCX");
+        }
+    }
+
+    /**
+     * Validates that the decoded file bytes begin with the DOCX / ZIP magic bytes
+     * ({@code PK\x03\x04}).
+     *
+     * @param fileBytes the decoded file bytes
+     * @throws CustomException with {@link ErrorCode#INVALID_FILE_TYPE} (HTTP 400)
+     *                         if the file does not start with the expected ZIP signature
+     */
+    private static void requireDocxMagicBytes(byte[] fileBytes) {
+        byte[] magic = Constants.DOCX_MAGIC_BYTES;
+        if (fileBytes.length < magic.length) {
+            throw new CustomException(ErrorCode.INVALID_FILE_TYPE, 400,
+                    "File is too small to be a valid DOCX document");
+        }
+        for (int i = 0; i < magic.length; i++) {
+            if (fileBytes[i] != magic[i]) {
+                throw new CustomException(ErrorCode.INVALID_FILE_TYPE, 400,
+                        "DOCX file must be a valid Office Open XML document");
+            }
+        }
+    }
 }

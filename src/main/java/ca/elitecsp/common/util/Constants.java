@@ -21,6 +21,12 @@ public final class Constants {
      */
     public static final byte[] PDF_MAGIC_BYTES = {0x25, 0x50, 0x44, 0x46};
 
+    /**
+     * DOCX magic bytes (ZIP PK signature: {@code PK\x03\x04}).
+     * DOCX files are ZIP-based OOXML archives and share this signature.
+     */
+    public static final byte[] DOCX_MAGIC_BYTES = {0x50, 0x4B, 0x03, 0x04};
+
     // -------------------------------------------------------------------------
     // MIME / Content-Type values
     // -------------------------------------------------------------------------
@@ -30,6 +36,10 @@ public final class Constants {
 
     /** MIME type for PDF documents. */
     public static final String CONTENT_TYPE_PDF = "application/pdf";
+
+    /** MIME type for DOCX (Office Open XML word processing) documents. */
+    public static final String CONTENT_TYPE_DOCX =
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
     // -------------------------------------------------------------------------
     // HTTP header names and values
@@ -63,6 +73,9 @@ public final class Constants {
 
     /** Subject prefix for contact-form emails sent via Amazon SES. */
     public static final String CONTACT_EMAIL_SUBJECT_PREFIX = "Elite CSP – Contact Form: ";
+
+    /** Subject prefix for job-application emails sent via Amazon SES. */
+    public static final String JOB_APPLICATION_EMAIL_SUBJECT_PREFIX = "Elite CSP – Job Application: ";
 
     // -------------------------------------------------------------------------
     // Email format pattern

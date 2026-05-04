@@ -1,18 +1,17 @@
 # Elite CSP Project
 
-Serverless backend for the Elite CSP website, built with Java 21 and AWS Lambda.
+Serverless backend for the Elite CSP website, built with Java 17 and AWS Lambda.
 
 ---
 
 ## Project Overview
 
-`elite-csp-project` is a **Java Maven multi-module** project that exposes two AWS Lambda functions behind Amazon API Gateway:
+`elite-csp-project` is a **single-module Java Maven project** that exposes one unified AWS Lambda function behind Amazon API Gateway.  The Lambda handles two distinct contact types via a single endpoint, routing logic based on the `type` field in the request payload.
 
-| Module | Lambda Function | Purpose |
-|---|---|---|
-| `elite-csp-common` | *(shared library)* | Reusable utilities, models, and exceptions |
-| `elite-csp-contact` | `ContactHandler` | Sends contact-form emails via **Amazon SES** |
-| `elite-csp-job-application` | `JobApplicationHandler` | Stores CV uploads and metadata in Amazon S3 |
+| Contact Type | Processing Path |
+|---|---|
+| `CONTACT` | Validates fields → sends notification email via Amazon SES |
+| `JOB_APPLICATION` | Validates fields → uploads CV to Amazon S3 → sends notification email with file link |
 
 ---
 
@@ -23,186 +22,138 @@ Angular (Frontend)
        │
        ▼
 Amazon API Gateway
-  ├── POST /contact          ──► elite-csp-contact Lambda  ──► Amazon SES
-  └── POST /job-application  ──► elite-csp-job-application Lambda ──► Amazon S3
-```
-
-### Module dependency tree
-
-```
-                        ┌─────────────────────────┐
-                        │   elite-csp-common       │
-                        │  (shared library JAR)    │
-                        │                          │
-                        │  common.exception/       │
-                        │    ErrorCode             │
-                        │    CustomException       │
-                        │  common.model/           │
-                        │    BaseResponse          │
-                        │  common.response/        │
-                        │    ApiResponseBuilder    │
-                        │  common.util/            │
-                        │    Constants             │
-                        │    JsonUtils             │
-                        │    ValidationUtils       │
-                        └───────────┬─────────────┘
-                                    │ depends on
-               ┌────────────────────┴────────────────────┐
-               │                                         │
-  ┌────────────┴──────────────┐       ┌──────────────────┴──────────────┐
-  │  elite-csp-contact        │       │  elite-csp-job-application      │
-  │                           │       │                                  │
-  │  handler/                 │       │  handler/                        │
-  │    ContactHandler         │       │    JobApplicationHandler         │
-  │  model/                   │       │  model/                          │
-  │    ContactRequest         │       │    JobApplicationRequest         │
-  │  service/                 │       │  service/                        │
-  │    SESService             │       │    S3Service                     │
-  │  util/                    │       │  util/                           │
-  │    ValidationUtil         │       │    ValidationUtil                │
-  └───────────────────────────┘       └──────────────────────────────────┘
-           │                                      │
-           ▼                                      ▼
-   Amazon SES (SDK v2)                    Amazon S3 (SDK v2)
+   └── POST /contact  ──► ContactHandler (Lambda)
+                               ├── type=CONTACT        ──► Amazon SES
+                               └── type=JOB_APPLICATION ──► Amazon S3 → Amazon SES
 ```
 
 ---
 
-## Project Structure
+## Package Structure
 
 ```
 elite-csp-project/
-├── pom.xml                              ← Parent POM (dependency management + Shade plugin)
+├── pom.xml                               ← Single-module POM (Shade plugin, SonarQube plugin)
 ├── README.md
-├── sonar-project.properties             ← SonarQube analysis configuration
-├── elite-csp-common/                    ← Shared library (built first)
-│   ├── pom.xml
-│   └── src/main/java/ca/elitecsp/common/
-│       ├── exception/
-│       │   ├── ErrorCode.java           ← Enum of machine-readable error codes
-│       │   └── CustomException.java     ← Structured exception with HTTP status
-│       ├── model/
-│       │   └── BaseResponse.java        ← Generic JSON response envelope (@Data @Builder)
-│       ├── response/
-│       │   └── ApiResponseBuilder.java  ← Builds APIGatewayProxyResponseEvent responses
-│       └── util/
-│           ├── Constants.java           ← Application-wide constants (limits, headers, etc.)
-│           ├── JsonUtils.java           ← Singleton ObjectMapper wrapper
-│           └── ValidationUtils.java     ← Shared field/email/file validation helpers
-├── elite-csp-contact/
-│   ├── pom.xml
-│   └── src/main/java/ca/elitecsp/contact/
-│       ├── handler/ContactHandler.java
-│       ├── model/ContactRequest.java    ← @Data @NoArgsConstructor @AllArgsConstructor
-│       ├── service/SESService.java      ← Sends email via Amazon SES SDK v2
-│       └── util/ValidationUtil.java
-└── elite-csp-job-application/
-    ├── pom.xml
-    └── src/main/java/ca/elitecsp/jobapplication/
-        ├── handler/JobApplicationHandler.java
-        ├── model/JobApplicationRequest.java  ← @Data @NoArgsConstructor @AllArgsConstructor
-        ├── service/S3Service.java
-        └── util/ValidationUtil.java
+├── sonar-project.properties              ← SonarQube analysis configuration
+└── src/main/
+    ├── java/ca/elitecsp/
+    │   ├── common/
+    │   │   ├── exception/
+    │   │   │   ├── ErrorCode.java        ← Enum of machine-readable error codes
+    │   │   │   └── CustomException.java  ← Structured exception (ErrorCode + HTTP status)
+    │   │   ├── model/
+    │   │   │   └── BaseResponse.java     ← Generic {success, message, error} envelope
+    │   │   ├── response/
+    │   │   │   └── ApiResponseBuilder.java ← APIGatewayProxyResponseEvent factory
+    │   │   └── util/
+    │   │       ├── Constants.java        ← Application-wide constants
+    │   │       ├── EmailTemplateLoader.java ← Classpath template loader ({{PLACEHOLDER}})
+    │   │       ├── JsonUtils.java        ← Singleton ObjectMapper wrapper
+    │   │       └── ValidationUtils.java  ← Generic field / email / file validation
+    │   └── contact/
+    │       ├── handler/
+    │       │   └── ContactHandler.java   ← Lambda entry point; routes by ContactType
+    │       ├── model/
+    │       │   ├── ContactRequest.java   ← Unified request payload (@Data @Builder)
+    │       │   └── ContactType.java      ← Enum: CONTACT | JOB_APPLICATION
+    │       ├── service/
+    │       │   ├── S3Service.java        ← Uploads CV attachment to Amazon S3
+    │       │   └── SESService.java       ← Sends notification emails via Amazon SES
+    │       └── util/
+    │           └── ValidationUtil.java   ← Type-aware request validation
+    └── resources/
+        └── templates/
+            ├── contact-email.html        ← HTML template for CONTACT emails
+            ├── contact-email.txt         ← Plain-text template for CONTACT emails
+            ├── job-application-email.html ← HTML template for JOB_APPLICATION emails
+            └── job-application-email.txt  ← Plain-text template for JOB_APPLICATION emails
 ```
 
 ---
 
-## Shared Module — elite-csp-common
+## Contact Types
 
-The `elite-csp-common` module is a plain JAR (no Shade packaging) that is **included in the fat JARs** of the Lambda modules via the Maven Shade plugin.
+### `CONTACT`
 
-### Purpose
+A standard website enquiry.  Sends a notification email to the configured recipient.  An optional file attachment (PDF or DOCX, max 5 MB) may be included inline in the email.
 
-Eliminates code duplication between `elite-csp-contact` and `elite-csp-job-application` by centralising:
+**Required fields:** `fullName`, `email`, `message`
+**Optional fields:** `city`, `subject`, `attachment`, `attachmentFileName`
 
-| Class | Package | Responsibility |
-|---|---|---|
-| `ErrorCode` | `common.exception` | Enum of machine-readable error identifiers |
-| `CustomException` | `common.exception` | Structured exception carrying `ErrorCode` + HTTP status |
-| `BaseResponse` | `common.model` | Generic `{success, message, error}` response envelope |
-| `ApiResponseBuilder` | `common.response` | Factory for `APIGatewayProxyResponseEvent` responses |
-| `Constants` | `common.util` | Named constants (CV size limit, PDF magic bytes, headers, email subject…) |
-| `JsonUtils` | `common.util` | Singleton `ObjectMapper` for JSON serialisation |
-| `ValidationUtils` | `common.util` | Generic field, email, Base64, and PDF validation helpers |
+### `JOB_APPLICATION`
 
-### Module dependencies
+A job application submission.  The CV is uploaded to Amazon S3 and a notification email is sent with a link to the file.
 
-```
-elite-csp-common
-  ├── aws-lambda-java-events   (for APIGatewayProxyResponseEvent)
-  ├── jackson-databind         (for ObjectMapper)
-  ├── lombok (provided)
-  └── slf4j-api
-
-elite-csp-contact
-  ├── elite-csp-common
-  ├── aws-lambda-java-core
-  ├── aws-lambda-java-events
-  ├── software.amazon.awssdk:ses
-  ├── lombok (provided)
-  ├── slf4j-api
-  └── slf4j-simple
-
-elite-csp-job-application
-  ├── elite-csp-common
-  ├── aws-lambda-java-core
-  ├── aws-lambda-java-events
-  ├── software.amazon.awssdk:s3
-  ├── lombok (provided)
-  ├── slf4j-api
-  └── slf4j-simple
-```
+**Required fields:** `fullName`, `email`, `message`, `attachment`, `attachmentFileName`
+**Optional fields:** `city`
+**Allowed file types:** PDF, DOCX (max 5 MB)
 
 ---
 
-## Modules
+## Request & Response Format
 
-### elite-csp-contact
+### Unified request (JSON body)
 
-Receives a contact-form submission from the front end and sends an email to the configured recipient using **Amazon Simple Email Service (SES)** via the AWS SDK v2.
-
-**Handler:** `ca.elitecsp.contact.handler.ContactHandler::handleRequest`
-
-**Request body (JSON):**
 ```json
 {
-  "name":    "John Doe",
-  "email":   "john@example.com",
-  "message": "Hello, I would like to get in touch."
+  "type":               "CONTACT | JOB_APPLICATION",
+  "fullName":           "Jane Smith",
+  "email":              "jane@example.com",
+  "city":               "Montréal",
+  "subject":            "Inquiry about services",
+  "message":            "Hello, I would like to...",
+  "attachment":         "<base64-encoded PDF or DOCX>",
+  "attachmentFileName": "resume.pdf"
 }
 ```
 
-**Success response (HTTP 200):**
+> **Backward compatibility:** `"name"` is accepted as an alias for `"fullName"` and
+> `"attachmentFile"` is accepted as an alias for `"attachment"`.
+
+### Success response (HTTP 200)
+
 ```json
 { "success": true, "message": "Your message has been sent successfully.", "error": null }
 ```
 
+### Error response (HTTP 400 / 500)
+
+```json
+{ "success": false, "message": "Descriptive error message", "error": "ERROR_CODE" }
+```
+
 ---
 
-### elite-csp-job-application
+## SES Email Templates
 
-Receives a job application form and uploads the PDF CV to an **Amazon S3** bucket together with a JSON metadata file.
+Email bodies are loaded from classpath resources at runtime.  Templates use `{{PLACEHOLDER}}` token substitution.
 
-**Handler:** `ca.elitecsp.jobapplication.handler.JobApplicationHandler::handleRequest`
+| Template file | Used for | Placeholders |
+|---|---|---|
+| `contact-email.html` / `.txt` | `CONTACT` type | `{{NAME}}`, `{{EMAIL}}`, `{{CITY}}`, `{{SUBJECT}}`, `{{MESSAGE}}` |
+| `job-application-email.html` / `.txt` | `JOB_APPLICATION` type | `{{NAME}}`, `{{EMAIL}}`, `{{CITY}}`, `{{MESSAGE}}`, `{{FILE_URL}}` |
 
-**Request body (JSON):**
-```json
-{
-  "fullName":    "Jane Smith",
-  "email":       "jane@example.com",
-  "city":        "Montréal",
-  "jobTitle":    "Software Engineer",
-  "cvFile":      "<base64-encoded PDF>",
-  "coverLetter": "I am excited to apply for..."
-}
-```
+All user-supplied values are HTML-escaped before injection to prevent XSS-style attacks in email clients.
 
-**Success response (HTTP 200):**
-```json
-{ "success": true, "message": "Application submitted successfully. File key: uploads/2024/06/uuid.pdf", "error": null }
-```
+---
 
-Files are stored in S3 under the path `uploads/{year}/{month}/{uuid}.pdf`.
+## Attachment Handling
+
+### CONTACT type
+
+- Attachment is **optional**.
+- Decoded from Base64 and included directly as a MIME attachment in the SES email.
+- Allowed types: PDF (magic bytes `%PDF`) and DOCX (ZIP magic bytes `PK\x03\x04`).
+- Maximum size: 5 MB.
+
+### JOB_APPLICATION type
+
+- Attachment is **required**.
+- Decoded from Base64, validated, and uploaded to S3 using a UUID-based key:
+  `uploads/{uuid}.{extension}`.
+- The S3 HTTPS URL is included in the notification email body.
+- Allowed types: PDF, DOCX; Maximum size: 5 MB.
 
 ---
 
@@ -210,96 +161,69 @@ Files are stored in S3 under the path `uploads/{year}/{month}/{uuid}.pdf`.
 
 ### Prerequisites
 
-- Java 21+
+- Java 17+
 - Apache Maven 3.8+
 
-### Build all modules
+### Build the fat JAR
 
 ```bash
 mvn clean package -DskipTests
 ```
 
-The `elite-csp-common` module is always built first (it is listed first in the parent POM's `<modules>` section).
-
-### Output artifacts
-
-| Module | Fat JAR location |
-|---|---|
-| `elite-csp-contact` | `elite-csp-contact/target/elite-csp-contact.jar` |
-| `elite-csp-job-application` | `elite-csp-job-application/target/elite-csp-job-application.jar` |
-
-> The `elite-csp-common` module produces a plain JAR that is bundled inside the two fat JARs above — it is not deployed separately.
+**Output:** `target/elite-csp-contact.jar`
 
 ---
 
 ## Deployment (AWS Lambda)
 
-### Step 1 – Build the fat JARs
+### Step 1 – Build
 
 ```bash
 mvn clean package -DskipTests
 ```
 
-### Step 2 – Create Lambda functions
+### Step 2 – Create the Lambda function
 
-**Contact function:**
 ```bash
 aws lambda create-function \
   --function-name elite-csp-contact \
-  --runtime java21 \
+  --runtime java17 \
   --role arn:aws:iam::<ACCOUNT_ID>:role/<LAMBDA_ROLE> \
   --handler ca.elitecsp.contact.handler.ContactHandler::handleRequest \
-  --zip-file fileb://elite-csp-contact/target/elite-csp-contact.jar \
+  --zip-file fileb://target/elite-csp-contact.jar \
   --timeout 30 \
   --memory-size 512
 ```
 
-**Job Application function:**
+### Step 3 – Set environment variables
+
 ```bash
-aws lambda create-function \
-  --function-name elite-csp-job-application \
-  --runtime java21 \
-  --role arn:aws:iam::<ACCOUNT_ID>:role/<LAMBDA_ROLE> \
-  --handler ca.elitecsp.jobapplication.handler.JobApplicationHandler::handleRequest \
-  --zip-file fileb://elite-csp-job-application/target/elite-csp-job-application.jar \
-  --timeout 30 \
-  --memory-size 512
+aws lambda update-function-configuration \
+  --function-name elite-csp-contact \
+  --environment "Variables={FROM_EMAIL=no-reply@example.com,DESTINATION_EMAIL=admin@example.com,S3_BUCKET_NAME=my-cv-bucket,AWS_REGION=us-east-1}"
 ```
 
-### Step 3 – Configure environment variables
+### Step 4 – Create the API Gateway route
 
-Set the environment variables listed in the section below via the AWS Console or CLI.
-
-### Step 4 – Create API Gateway endpoints
-
-Create an HTTP API (or REST API) in API Gateway and configure the following routes:
+Create an HTTP API in API Gateway and configure:
 
 | Method | Path | Lambda |
 |---|---|---|
 | `POST` | `/contact` | `elite-csp-contact` |
-| `POST` | `/job-application` | `elite-csp-job-application` |
 
 ---
 
 ## Environment Variables
 
-### elite-csp-contact
+| Variable | Required | Description |
+|---|---|---|
+| `FROM_EMAIL` | ✅ | Verified SES sender email address |
+| `DESTINATION_EMAIL` | ✅ | Recipient email address for all notifications |
+| `AWS_REGION` | ✅ | AWS region (e.g. `us-east-1`) |
+| `S3_BUCKET_NAME` | ✅ | S3 bucket for CV uploads (JOB_APPLICATION only) |
 
-| Variable | Description |
-|---|---|
-| `FROM_EMAIL` | Verified SES sender email address |
-| `DESTINATION_EMAIL` | Recipient email address for contact messages |
-| `AWS_REGION` | AWS region where SES is configured (e.g. `us-east-1`) |
-
-> **Note:** AWS credentials (access key / secret) are **not** required as environment variables.
+> **Note:** AWS credentials are **not** required as environment variables.
 > The Lambda execution role provides them automatically via the AWS default credential chain.
-
-### elite-csp-job-application
-
-| Variable | Description |
-|---|---|
-| `S3_BUCKET_NAME` | Name of the S3 bucket where CVs are stored |
-| `AWS_REGION` | AWS region (e.g. `eu-west-1`) |
 
 ---
 
@@ -311,8 +235,11 @@ Create an HTTP API (or REST API) in API Gateway and configure the following rout
 curl -X POST https://<api-id>.execute-api.<region>.amazonaws.com/contact \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "John Doe",
-    "email": "john@example.com",
+    "type":    "CONTACT",
+    "fullName": "John Doe",
+    "email":   "john@example.com",
+    "city":    "Toronto",
+    "subject": "Service inquiry",
     "message": "I would like to learn more about your services."
   }'
 ```
@@ -320,18 +247,19 @@ curl -X POST https://<api-id>.execute-api.<region>.amazonaws.com/contact \
 ### Job Application (cURL)
 
 ```bash
-# Encode the PDF first
+# Encode the CV first
 CV_BASE64=$(base64 -w 0 resume.pdf)
 
-curl -X POST https://<api-id>.execute-api.<region>.amazonaws.com/job-application \
+curl -X POST https://<api-id>.execute-api.<region>.amazonaws.com/contact \
   -H "Content-Type: application/json" \
   -d "{
-    \"fullName\": \"Jane Smith\",
-    \"email\": \"jane@example.com\",
-    \"city\": \"Montréal\",
-    \"jobTitle\": \"Software Engineer\",
-    \"cvFile\": \"$CV_BASE64\",
-    \"coverLetter\": \"I am excited to apply for this position.\"
+    \"type\":               \"JOB_APPLICATION\",
+    \"fullName\":           \"Jane Smith\",
+    \"email\":              \"jane@example.com\",
+    \"city\":               \"Montréal\",
+    \"message\":            \"I am excited to apply for this position.\",
+    \"attachment\":         \"$CV_BASE64\",
+    \"attachmentFileName\": \"resume.pdf\"
   }"
 ```
 
@@ -344,12 +272,7 @@ curl -X POST https://<api-id>.execute-api.<region>.amazonaws.com/job-application
 | `400 Bad Request` | Validation error (missing field, invalid email, wrong file type, file too large) |
 | `500 Internal Server Error` | Unexpected server-side error |
 
-**Error response body:**
-```json
-{ "success": false, "message": "Descriptive error message", "error": "ERROR_CODE" }
-```
-
-The `error` field contains a machine-readable `ErrorCode` name (e.g. `MISSING_REQUIRED_FIELD`, `INVALID_EMAIL`, `FILE_TOO_LARGE`, `EMAIL_SEND_FAILURE`).
+The `error` field contains a machine-readable `ErrorCode` name (e.g. `MISSING_REQUIRED_FIELD`, `INVALID_EMAIL`, `FILE_TOO_LARGE`, `EMAIL_SEND_FAILURE`, `S3_UPLOAD_FAILURE`).
 
 ---
 
@@ -365,32 +288,53 @@ mvn clean package sonar:sonar \
   -Dsonar.login=<SONAR_TOKEN>
 ```
 
-### Quality Gate Summary
+### Code Quality Report
 
 | Dimension | Rating | Notes |
 |---|---|---|
-| **Maintainability** | A | Shared module eliminates duplication; constants replace magic values; Lombok reduces boilerplate |
-| **Security** | B | No hardcoded credentials; HTML content is escaped before email injection; input validated before use |
-| **Reliability** | A | All public methods guard against null/blank inputs; exceptions carry HTTP status codes |
+| **Maintainability** | A | Single-module layout; shared `common.*` packages eliminate duplication; constants replace magic values; Lombok reduces boilerplate |
+| **Security** | B | No hardcoded credentials; HTML content is escaped before email injection; inputs validated before use; file type verified by magic bytes |
+| **Reliability** | A | All public methods guard against null/blank inputs; exceptions carry HTTP status codes; structured logging throughout |
 
-### Identified Issues & Resolutions
+### Code Smells Identified & Resolved
 
 | Issue | Status |
 |---|---|
 | Hardcoded Google OAuth credentials | ✅ Resolved – replaced with SES + IAM role |
 | Gmail OAuth2 scope (unused secret exposure) | ✅ Resolved – OAuth2 flow removed entirely |
-| Missing HTML escaping in email body | ✅ Resolved – `htmlEscape()` applied to all user-supplied fields before rendering in email |
-| Magic string for email subject | ✅ Resolved – moved to `Constants.CONTACT_EMAIL_SUBJECT_PREFIX` |
-| `System.out` logging | ✅ Resolved – all modules use `@Slf4j` structured logging |
+| Missing HTML escaping in email body | ✅ Resolved – `htmlEscape()` applied to all user-supplied fields |
+| Magic string for email subject | ✅ Resolved – moved to `Constants.CONTACT_EMAIL_SUBJECT_PREFIX` / `JOB_APPLICATION_EMAIL_SUBJECT_PREFIX` |
+| `System.out` logging | ✅ Resolved – all classes use `@Slf4j` structured logging |
 | Duplicated validation logic | ✅ Resolved – `ValidationUtil` delegates to shared `ValidationUtils` |
+| Separate Lambda modules for contact/job-application | ✅ Resolved – unified single Lambda with `ContactType` routing |
+| PDF-only attachment support | ✅ Resolved – added DOCX support via ZIP magic bytes validation |
+
+### Security Issues
+
+| Area | Issue | Mitigation |
+|---|---|---|
+| Input validation | Malformed JSON body | `JsonUtils.fromJson` throws `CustomException(JSON_PARSE_ERROR, 400)` |
+| Input validation | Missing/blank required fields | `ValidationUtils.requireNonBlank` / `requireValidEmail` |
+| File upload | Oversized files | `requireCvSizeWithinLimit` (5 MB cap) |
+| File upload | Wrong file type | `requireAllowedFileType` checks magic bytes + extension |
+| File upload | Path traversal via filename | S3 key uses UUID — original filename not used in storage path |
+| Email injection | XSS via user content in email body | `htmlEscape()` applied to all user-supplied fields |
+
+### Performance Notes
+
+- The `ObjectMapper` in `JsonUtils` is a singleton — thread-safe and avoids re-initialisation per invocation.
+- File bytes are decoded once during validation and once during processing (minor overhead, trades clarity for performance).
+- AWS SDK clients (`SesClient`, `S3Client`) are initialised once in the constructor and reused across warm invocations.
 
 ### Recommendations
 
 | Recommendation | Priority |
 |---|---|
-| Add **rate limiting** on API Gateway to prevent abuse of the contact endpoint | High |
-| Add a **CAPTCHA** (e.g. AWS WAF CAPTCHA or reCAPTCHA) on the contact form | High |
+| Add **rate limiting** on API Gateway to prevent abuse | High |
+| Add a **CAPTCHA** (e.g. AWS WAF CAPTCHA or reCAPTCHA) on the frontend form | High |
 | Protect the API with **AWS WAF** (Web Application Firewall) rules | Medium |
 | Monitor invocation errors and SES bounce/complaint rates via **Amazon CloudWatch** | Medium |
 | Enable **SES event publishing** (SNS) to track delivery, bounce, and complaint events | Medium |
-| Add unit tests with mocked `SesClient` to verify email construction | Low |
+| Configure **S3 bucket policy** to block public access; use pre-signed URLs for CV review | Medium |
+| Add unit tests with mocked `SesClient` and `S3Client` | Low |
+
