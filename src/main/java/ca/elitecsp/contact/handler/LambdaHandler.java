@@ -7,8 +7,7 @@ import ca.elitecsp.common.util.JsonUtils;
 import ca.elitecsp.common.util.ValidationUtils;
 import ca.elitecsp.contact.model.ContactRequest;
 import ca.elitecsp.contact.model.ContactType;
-import ca.elitecsp.contact.service.S3Service;
-import ca.elitecsp.contact.service.SESService;
+import ca.elitecsp.contact.service.EmailService;
 import ca.elitecsp.contact.util.ValidationUtil;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
@@ -17,7 +16,7 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * AWS Lambda handler for the unified contact / job-application endpoint.
+ * AWS Lambda handler for the contact / job-application endpoint.
  *
  * <p>Triggered by Amazon API Gateway (proxy integration).
  * The handler:
@@ -28,40 +27,36 @@ import lombok.extern.slf4j.Slf4j;
  *       <ul>
  *         <li>{@link ContactType#CONTACT} – sends a notification email via SES
  *             (with optional inline attachment).</li>
- *         <li>{@link ContactType#JOB_APPLICATION} – uploads the CV to Amazon S3
- *             then sends a notification email containing the file URL.</li>
+ *         <li>{@link ContactType#JOB_APPLICATION} – sends a notification email via SES
+ *             with the CV file attached directly.</li>
  *       </ul>
  *   </li>
  *   <li>Returns a structured JSON response.</li>
  * </ol>
  *
  * <p>Handler reference for Lambda:
- * {@code ca.elitecsp.contact.handler.ContactHandler::handleRequest}
+ * {@code ca.elitecsp.contact.handler.LambdaHandler::handleRequest}
  */
 @Slf4j
-public class ContactHandler implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
+public class LambdaHandler implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
 
-    private final SESService sesService;
-    private final S3Service s3Service;
+    private final EmailService emailService;
 
     /**
      * Default no-arg constructor used by the Lambda runtime.
-     * Initialises {@link SESService} and {@link S3Service} from environment variables.
+     * Initialises {@link EmailService} from environment variables.
      */
-    public ContactHandler() {
-        this.sesService = new SESService();
-        this.s3Service = new S3Service();
+    public LambdaHandler() {
+        this.emailService = new EmailService();
     }
 
     /**
      * Constructor for dependency injection (useful in tests).
      *
-     * @param sesService the SES service to use
-     * @param s3Service  the S3 service to use
+     * @param emailService the email service to use
      */
-    public ContactHandler(SESService sesService, S3Service s3Service) {
-        this.sesService = sesService;
-        this.s3Service = s3Service;
+    public LambdaHandler(EmailService emailService) {
+        this.emailService = emailService;
     }
 
     /**
@@ -73,7 +68,7 @@ public class ContactHandler implements RequestHandler<APIGatewayProxyRequestEven
      */
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent request, Context context) {
-        log.info("ContactHandler invoked");
+        log.info("LambdaHandler invoked");
 
         try {
             ContactRequest contactRequest = parseRequest(request);
@@ -118,7 +113,7 @@ public class ContactHandler implements RequestHandler<APIGatewayProxyRequestEven
             log.info("Attachment '{}' included in contact request", req.getAttachmentFileName());
         }
 
-        sesService.sendContactEmail(
+        emailService.sendContactEmail(
                 req.getFullName(),
                 req.getEmail(),
                 req.getCity(),
@@ -133,25 +128,23 @@ public class ContactHandler implements RequestHandler<APIGatewayProxyRequestEven
 
     /**
      * Processes a job-application submission.
-     * Uploads the CV to S3 and sends a notification email containing the file URL.
+     * Sends a notification email via SES with the CV attached directly.
      *
      * @param req the validated job-application request
      * @return a 200 success response
      */
     private APIGatewayProxyResponseEvent handleJobApplication(ContactRequest req) {
         byte[] fileBytes = ValidationUtils.decodeBase64File(req.getAttachment());
-        log.info("Uploading CV '{}' to S3 for applicant: {}", req.getAttachmentFileName(), req.getEmail());
+        log.info("Sending job application email with CV '{}' for applicant: {}",
+                req.getAttachmentFileName(), req.getEmail());
 
-        String s3Key = s3Service.upload(fileBytes, req.getAttachmentFileName());
-        String fileUrl = s3Service.getFileUrl(s3Key);
-        log.info("CV uploaded: key={}", s3Key);
-
-        sesService.sendJobApplicationEmail(
+        emailService.sendJobApplicationEmail(
                 req.getFullName(),
                 req.getEmail(),
                 req.getCity(),
                 req.getMessage(),
-                fileUrl
+                fileBytes,
+                req.getAttachmentFileName()
         );
         log.info("Job-application email sent successfully for: {}", req.getEmail());
         return ApiResponseBuilder.success("Your application has been submitted successfully.");

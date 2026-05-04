@@ -12,9 +12,10 @@ import lombok.NoArgsConstructor;
  *
  * <p>The {@link #type} field selects the processing path:
  * <ul>
- *   <li>{@link ContactType#CONTACT} (default) – sends a notification email via SES.</li>
- *   <li>{@link ContactType#JOB_APPLICATION} – uploads the CV to S3, then sends an email
- *       with the file URL; {@link #attachment} and {@link #attachmentFileName} are
+ *   <li>{@link ContactType#CONTACT} (default) – sends a notification email via SES
+ *       (attachment is optional).</li>
+ *   <li>{@link ContactType#JOB_APPLICATION} – sends a notification email via SES with the
+ *       CV attached directly; {@link #attachment} and {@link #attachmentFileName} are
  *       required for this type.</li>
  * </ul>
  *
