@@ -77,8 +77,7 @@ public class ContactHandler implements RequestHandler<APIGatewayProxyRequestEven
 
         try {
             ContactRequest contactRequest = parseRequest(request);
-            ContactType type = contactRequest.getType() != null
-                    ? contactRequest.getType() : ContactType.CONTACT;
+            ContactType type = contactRequest.getEffectiveType();
             log.info("Contact request received: type={}, email={}", type, contactRequest.getEmail());
 
             ValidationUtil.validateContactRequest(contactRequest);

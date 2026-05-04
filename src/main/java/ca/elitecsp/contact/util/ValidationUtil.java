@@ -46,7 +46,7 @@ public final class ValidationUtil {
         ValidationUtils.requireValidEmail(request.getEmail(), "Email");
         ValidationUtils.requireNonBlank(request.getMessage(), "Message");
 
-        ContactType type = request.getType() != null ? request.getType() : ContactType.CONTACT;
+        ContactType type = request.getEffectiveType();
 
         if (type == ContactType.JOB_APPLICATION) {
             // Attachment is mandatory for job applications

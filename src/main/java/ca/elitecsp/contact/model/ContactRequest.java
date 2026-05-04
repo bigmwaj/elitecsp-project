@@ -76,5 +76,15 @@ public class ContactRequest {
      * {@code "cv.docx"}).  Required when {@link #attachment} is provided.
      */
     private String attachmentFileName;
+
+    /**
+     * Returns the effective contact type, defaulting to {@link ContactType#CONTACT}
+     * when the {@link #type} field was omitted from the JSON payload.
+     *
+     * @return the non-null contact type to apply
+     */
+    public ContactType getEffectiveType() {
+        return type != null ? type : ContactType.CONTACT;
+    }
 }
 

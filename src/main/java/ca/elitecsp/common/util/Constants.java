@@ -23,7 +23,10 @@ public final class Constants {
 
     /**
      * DOCX magic bytes (ZIP PK signature: {@code PK\x03\x04}).
-     * DOCX files are ZIP-based OOXML archives and share this signature.
+     * DOCX files are ZIP-based OOXML archives and share this signature with other ZIP
+     * formats (e.g. XLSX, JAR).  This check is combined with an extension check in
+     * {@link ca.elitecsp.common.util.ValidationUtils#requireAllowedFileType} to
+     * reduce false positives.
      */
     public static final byte[] DOCX_MAGIC_BYTES = {0x50, 0x4B, 0x03, 0x04};
 
