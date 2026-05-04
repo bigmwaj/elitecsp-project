@@ -4,6 +4,7 @@ import ca.elitecsp.common.exception.CustomException;
 import ca.elitecsp.common.exception.ErrorCode;
 import ca.elitecsp.common.response.ApiResponseBuilder;
 import ca.elitecsp.common.util.JsonUtils;
+import ca.elitecsp.common.util.ValidationUtils;
 import ca.elitecsp.contact.model.ContactRequest;
 import ca.elitecsp.contact.service.SESService;
 import ca.elitecsp.contact.util.ValidationUtil;
@@ -20,7 +21,7 @@ import lombok.extern.slf4j.Slf4j;
  * The handler:
  * <ol>
  *   <li>Parses the JSON body into a {@link ContactRequest}.</li>
- *   <li>Validates the request fields.</li>
+ *   <li>Validates the request fields (including any optional attachment).</li>
  *   <li>Delegates email sending to {@link SESService}.</li>
  *   <li>Returns a structured JSON response.</li>
  * </ol>
@@ -65,10 +66,19 @@ public class ContactHandler implements RequestHandler<APIGatewayProxyRequestEven
             ContactRequest contactRequest = parseRequest(request);
             log.info("Contact request received from: {}", contactRequest.getEmail());
             ValidationUtil.validateContactRequest(contactRequest);
+
+            byte[] attachmentBytes = null;
+            if (!ValidationUtils.isBlank(contactRequest.getAttachmentFile())) {
+                attachmentBytes = ValidationUtils.decodeBase64File(contactRequest.getAttachmentFile());
+                log.info("Attachment '{}' included in contact request", contactRequest.getAttachmentFileName());
+            }
+
             sesService.sendContactEmail(
                     contactRequest.getName(),
                     contactRequest.getEmail(),
-                    contactRequest.getMessage()
+                    contactRequest.getMessage(),
+                    attachmentBytes,
+                    contactRequest.getAttachmentFileName()
             );
             log.info("Email sent successfully for: {}", contactRequest.getEmail());
             return ApiResponseBuilder.success("Your message has been sent successfully.");
