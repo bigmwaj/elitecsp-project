@@ -39,7 +39,7 @@ import java.util.Properties;
  *       attachment (PDF or DOCX). When an attachment is present the email is built as a
  *       raw MIME multipart message; otherwise a simple {@code sendEmail} call is used.</li>
  *   <li><b>Job Application</b> – sent via {@link #sendJobApplicationEmail}; the CV is
- *       already stored in S3 and only a link is included in the email body.</li>
+ *       attached directly to the email as a MIME multipart message.</li>
  * </ul>
  *
  * <p>Email bodies (plain-text and HTML) are loaded from classpath templates:
@@ -59,7 +59,7 @@ import java.util.Properties;
  * (Lambda execution role, environment variables, or instance profile) — no hardcoded secrets.
  */
 @Slf4j
-public class SESService {
+public class EmailService {
 
     private static final String ENV_FROM_EMAIL = "FROM_EMAIL";
     private static final String ENV_DESTINATION_EMAIL = "DESTINATION_EMAIL";
@@ -80,7 +80,7 @@ public class SESService {
      *
      * @throws CustomException if any required environment variable is missing
      */
-    public SESService() {
+    public EmailService() {
         this.fromEmail = requireEnv(ENV_FROM_EMAIL);
         this.destinationEmail = requireEnv(ENV_DESTINATION_EMAIL);
         String awsRegion = requireEnv(ENV_AWS_REGION);
@@ -96,7 +96,7 @@ public class SESService {
      * @param destinationEmail recipient email address
      * @param sesClient        pre-configured SES client
      */
-    SESService(String fromEmail, String destinationEmail, SesClient sesClient) {
+    EmailService(String fromEmail, String destinationEmail, SesClient sesClient) {
         this.fromEmail = fromEmail;
         this.destinationEmail = destinationEmail;
         this.sesClient = sesClient;
@@ -123,11 +123,24 @@ public class SESService {
                                   byte[] attachmentBytes, String attachmentName) {
         log.info("Sending contact email via SES on behalf of: {}", senderEmail);
         try {
+            String emailSubject = resolveContactSubject(subject, fullName);
+            Map<String, String> placeholders = buildContactPlaceholders(
+                    fullName, senderEmail, city, messageBody, subject);
+
             if (attachmentBytes != null) {
-                sendRawContactEmail(fullName, senderEmail, city, subject, messageBody,
+                byte[] rawMime = buildRawMimeMessage(emailSubject, senderEmail,
+                        EmailTemplateLoader.load("contact-email.txt", placeholders),
+                        EmailTemplateLoader.load("contact-email.html", placeholders),
                         attachmentBytes, attachmentName);
+                sesClient.sendRawEmail(SendRawEmailRequest.builder()
+                        .rawMessage(RawMessage.builder()
+                                .data(SdkBytes.fromByteArray(rawMime))
+                                .build())
+                        .build());
             } else {
-                sendSimpleContactEmail(fullName, senderEmail, city, subject, messageBody);
+                sendSimpleEmail(emailSubject, senderEmail,
+                        EmailTemplateLoader.load("contact-email.txt", placeholders),
+                        EmailTemplateLoader.load("contact-email.html", placeholders));
             }
             log.info("Contact email sent successfully to {} on behalf of {}", destinationEmail, senderEmail);
         } catch (CustomException e) {
@@ -140,29 +153,35 @@ public class SESService {
     }
 
     /**
-     * Sends a job-application notification email via Amazon SES.
+     * Sends a job-application notification email via Amazon SES with the CV attached directly.
      *
-     * <p>The CV has already been uploaded to S3; the {@code fileUrl} parameter
-     * contains the publicly-accessible link included in the email body.
-     *
-     * @param fullName    the full name of the applicant
-     * @param senderEmail the applicant's email address (used as Reply-To)
-     * @param city        the applicant's city (optional; may be {@code null} or blank)
-     * @param messageBody the cover letter / message body
-     * @param fileUrl     the S3 HTTPS URL of the uploaded CV
+     * @param fullName        the full name of the applicant
+     * @param senderEmail     the applicant's email address (used as Reply-To)
+     * @param city            the applicant's city (optional; may be {@code null} or blank)
+     * @param messageBody     the cover letter / message body
+     * @param attachmentBytes the decoded CV file bytes to attach; must not be {@code null}
+     * @param attachmentName  the original filename for the CV attachment (e.g. {@code "resume.pdf"})
      * @throws CustomException with {@link ErrorCode#EMAIL_SEND_FAILURE} (HTTP 500) if sending fails
      */
     public void sendJobApplicationEmail(String fullName, String senderEmail, String city,
-                                         String messageBody, String fileUrl) {
+                                         String messageBody,
+                                         byte[] attachmentBytes, String attachmentName) {
         log.info("Sending job-application email via SES on behalf of: {}", senderEmail);
         try {
             String emailSubject = Constants.JOB_APPLICATION_EMAIL_SUBJECT_PREFIX + fullName;
             Map<String, String> placeholders = buildJobApplicationPlaceholders(
-                    fullName, senderEmail, city, messageBody, fileUrl);
+                    fullName, senderEmail, city, messageBody, attachmentName);
 
-            sendSimpleEmail(emailSubject, senderEmail,
+            byte[] rawMime = buildRawMimeMessage(emailSubject, senderEmail,
                     EmailTemplateLoader.load("job-application-email.txt", placeholders),
-                    EmailTemplateLoader.load("job-application-email.html", placeholders));
+                    EmailTemplateLoader.load("job-application-email.html", placeholders),
+                    attachmentBytes, attachmentName);
+
+            sesClient.sendRawEmail(SendRawEmailRequest.builder()
+                    .rawMessage(RawMessage.builder()
+                            .data(SdkBytes.fromByteArray(rawMime))
+                            .build())
+                    .build());
 
             log.info("Job-application email sent successfully to {} on behalf of {}",
                     destinationEmail, senderEmail);
@@ -176,18 +195,8 @@ public class SESService {
     }
 
     // -------------------------------------------------------------------------
-    // Private helpers – contact email (no attachment)
+    // Private helpers – simple email (no attachment)
     // -------------------------------------------------------------------------
-
-    private void sendSimpleContactEmail(String fullName, String senderEmail, String city,
-                                         String subject, String messageBody) {
-        String emailSubject = resolveContactSubject(subject, fullName);
-        Map<String, String> placeholders = buildContactPlaceholders(fullName, senderEmail, city, messageBody, subject);
-
-        sendSimpleEmail(emailSubject, senderEmail,
-                EmailTemplateLoader.load("contact-email.txt", placeholders),
-                EmailTemplateLoader.load("contact-email.html", placeholders));
-    }
 
     private void sendSimpleEmail(String subject, String replyTo, String textBody, String htmlBody) {
         Content subjectContent = Content.builder().data(subject).charset("UTF-8").build();
@@ -210,31 +219,8 @@ public class SESService {
     }
 
     // -------------------------------------------------------------------------
-    // Private helpers – contact email with attachment (raw MIME)
+    // Private helpers – raw MIME email with attachment
     // -------------------------------------------------------------------------
-
-    private void sendRawContactEmail(String fullName, String senderEmail, String city,
-                                      String subject, String messageBody,
-                                      byte[] attachmentBytes, String attachmentName) {
-        try {
-            String emailSubject = resolveContactSubject(subject, fullName);
-            Map<String, String> placeholders = buildContactPlaceholders(
-                    fullName, senderEmail, city, messageBody, subject);
-            byte[] rawMime = buildRawMimeMessage(emailSubject, senderEmail,
-                    EmailTemplateLoader.load("contact-email.txt", placeholders),
-                    EmailTemplateLoader.load("contact-email.html", placeholders),
-                    attachmentBytes, attachmentName);
-
-            sesClient.sendRawEmail(SendRawEmailRequest.builder()
-                    .rawMessage(RawMessage.builder()
-                            .data(SdkBytes.fromByteArray(rawMime))
-                            .build())
-                    .build());
-        } catch (MessagingException | IOException e) {
-            throw new CustomException(ErrorCode.EMAIL_SEND_FAILURE, 500,
-                    "Failed to build MIME message: " + e.getMessage(), e);
-        }
-    }
 
     private byte[] buildRawMimeMessage(String subject, String replyTo,
                                         String textBody, String htmlBody,
@@ -268,7 +254,14 @@ public class SESService {
 
         // Attachment part
         String lowerName = attachmentName != null ? attachmentName.toLowerCase() : "";
-        String attachmentMime = lowerName.endsWith(".docx") ? Constants.CONTENT_TYPE_DOCX : Constants.CONTENT_TYPE_PDF;
+        String attachmentMime;
+        if (lowerName.endsWith(".pdf")) {
+            attachmentMime = Constants.CONTENT_TYPE_PDF;
+        } else if (lowerName.endsWith(".docx")) {
+            attachmentMime = Constants.CONTENT_TYPE_DOCX;
+        } else {
+            attachmentMime = "application/octet-stream";
+        }
         MimeBodyPart attachmentPart = new MimeBodyPart();
         attachmentPart.setDataHandler(
                 new DataHandler(new ByteArrayDataSource(attachmentBytes, attachmentMime)));
@@ -308,13 +301,13 @@ public class SESService {
      */
     private Map<String, String> buildJobApplicationPlaceholders(String fullName, String senderEmail,
                                                                   String city, String messageBody,
-                                                                  String fileUrl) {
+                                                                  String attachmentName) {
         Map<String, String> map = new HashMap<>();
         map.put("{{NAME}}", htmlEscape(fullName));
         map.put("{{EMAIL}}", htmlEscape(senderEmail));
         map.put("{{CITY}}", htmlEscape(city != null ? city : ""));
         map.put("{{MESSAGE}}", htmlEscape(messageBody).replace("\n", "<br/>"));
-        map.put("{{FILE_URL}}", htmlEscape(fileUrl));
+        map.put("{{ATTACHMENT_NAME}}", htmlEscape(attachmentName != null ? attachmentName : ""));
         return map;
     }
 

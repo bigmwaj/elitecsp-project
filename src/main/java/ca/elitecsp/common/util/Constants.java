@@ -58,13 +58,6 @@ public final class Constants {
     public static final String CORS_ALLOW_ALL = "*";
 
     // -------------------------------------------------------------------------
-    // S3 key patterns
-    // -------------------------------------------------------------------------
-
-    /** S3 key prefix for uploaded CV files. */
-    public static final String S3_UPLOADS_PREFIX = "uploads";
-
-    // -------------------------------------------------------------------------
     // Email / SES constants
     // -------------------------------------------------------------------------
 

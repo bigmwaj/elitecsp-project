@@ -29,9 +29,6 @@ public enum ErrorCode {
     /** Sending an email via Amazon SES failed. */
     EMAIL_SEND_FAILURE,
 
-    /** Uploading a file or metadata to Amazon S3 failed. */
-    S3_UPLOAD_FAILURE,
-
     /** An unexpected internal error occurred. */
     INTERNAL_ERROR
 }
