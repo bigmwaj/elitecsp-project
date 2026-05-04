@@ -26,7 +26,7 @@ public enum ErrorCode {
     /** The request body could not be parsed as valid JSON. */
     JSON_PARSE_ERROR,
 
-    /** Sending an email via the Gmail API failed. */
+    /** Sending an email via Amazon SES failed. */
     EMAIL_SEND_FAILURE,
 
     /** Uploading a file or metadata to Amazon S3 failed. */
