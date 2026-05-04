@@ -60,6 +60,13 @@
             <version>${aws-sdk-v2.version}</version>
         </dependency>
 
+        <!-- AWS SDK v2 S3 (attachment storage for job applications) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${aws-sdk-v2.version}</version>
+        </dependency>
+
         <!-- Jakarta Mail for MIME multipart construction (attachment support) -->
         <dependency>
             <groupId>com.sun.mail</groupId>

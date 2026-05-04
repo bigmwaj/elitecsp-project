@@ -1,0 +1,9 @@
+A new job application has been submitted through the Elite CSP website.
+
+Name:         {{NAME}}
+Email:        {{EMAIL}}
+City:         {{CITY}}
+Resume / CV:  {{FILE_URL}}
+
+Cover Letter:
+{{MESSAGE}}
